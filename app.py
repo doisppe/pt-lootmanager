@@ -16,24 +16,24 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 def carregar_dados(aba):
     try:
         df = conn.read(spreadsheet=URL_PLANILHA, worksheet=aba, ttl=0)
-        df = df.dropna(how="all") 
-        df = df.fillna("").astype(str)
+        df = df.dropna(how="all").fillna("").astype(str)
         return df
     except:
         return pd.DataFrame() 
 
+# Carregamento inicial de dados
 df_equipamentos = carregar_dados("Equipamentos")
 df_tesouraria = carregar_dados("Tesouraria")
-df_config = carregar_dados("Config") # <--- AQUI ELE LÊ A ABA NOVA
+df_config = carregar_dados("Config")
 
-# Lógica para carregar os membros salvos ou usar o padrão
+# Fixando os membros na memória para evitar o reset chato
 if not df_config.empty and "Membros" in df_config.columns:
     membros_salvos = "\n".join(df_config["Membros"].tolist())
 else:
     membros_salvos = "Isabela\nFelippe\nPlayer3"
 
 # ==========================================
-# 2. ESTILOS VISUAIS E CSS
+# 2. ESTILOS VISUAIS
 # ==========================================
 st.markdown("""
     <style>
@@ -51,27 +51,21 @@ st.markdown("""
 st.title("😈 Os Coisaruim guild loot management")
 
 # ==========================================
-# 3. BARRA LATERAL (CONFIGURAÇÕES)
+# 3. BARRA LATERAL
 # ==========================================
 with st.sidebar:
     st.header("⚙️ Configurações da PT")
-    
-    # O valor inicial agora vem da planilha
-    nomes_input = st.text_area("Membros da PT (um por linha):", value=membros_salvos, height=250)
+    nomes_input = st.text_area("Membros da PT:", value=membros_salvos, height=250)
     membros = [m.strip() for m in nomes_input.split("\n") if m.strip()]
     
-    # === OLHA O BOTÃO AQUI! ===
     if st.button("💾 Salvar Lista de Membros", type="primary", use_container_width=True):
         df_membros_novo = pd.DataFrame({"Membros": membros})
         conn.update(spreadsheet=URL_PLANILHA, worksheet="Config", data=df_membros_novo)
-        st.success("Lista de membros atualizada na nuvem!")
+        st.success("Lista de membros fixa!")
         st.rerun()
-    
-    st.divider()
-    st.caption("ℹ️ Os dados são salvos no Google Sheets. Use o botão acima para fixar os membros.")
 
 # ==========================================
-# 4. DICIONÁRIO COMPLETO DE MINI BOSSES
+# 4. DICIONÁRIO DE BOSSES (Mesma lista sua)
 # ==========================================
 mini_bosses = {
     "Angeling": {"foto_boss": "https://static.divine-pride.net/images/mobs/png/1096.png", "drops": ["Cherubin Wing Shoulders", "Angeling Hat", "Carta Angeling"]},
@@ -84,8 +78,8 @@ mini_bosses = {
     "Chepet": {"foto_boss": "https://static.divine-pride.net/images/mobs/png/1250.png", "drops": ["Pom band" , "Scarlet Ribbon", "Carta Chepet"]},
     "Chimera": {"foto_boss": "https://static.divine-pride.net/images/mobs/png/1283.png", "drops": ["White Snake Ring" , "Chimera Mane", "Carta Chimera"]},
     "Deviling": {"foto_boss": "https://static.divine-pride.net/images/mobs/png/1767.png", "drops": ["Deviling Hat","Devil Wing Shoulders", "Carta Deviling"]},
-    "Dragon Fly": {"foto_boss": "https://static.divine-pride.net/images/mobs/png/3424.png", "drops": ["Sitting Dragontail", "Flying Helmet", "Carta Dragon Fly"]},
-    "Eclipse": {"foto_boss": "https://static.divine-pride.net/images/mobs/png/1147.png", "drops": ["Carrot in mouth" , "Lunatic Brooch", "Carta Eclipse"]},
+    "Dragon Fly": {"foto_boss": "https://static.divine-pride.net/images/mobs/png/1091.png", "drops": ["Sitting Dragontail", "Flying Helmet", "Carta Dragon Fly"]},
+    "Eclipse": {"foto_boss": "https://static.divine-pride.net/images/mobs/png/3424.png", "drops": ["Carrot in mouth" , "Lunatic Brooch", "Carta Eclipse"]},
     "Enraged Priest": {"foto_boss": "https://static.divine-pride.net/images/mobs/png/3514.png", "drops": ["Linen Gloves", "Pontiff's Cassock","Doom Slayer", "Carta Enraged Priest"]},
     "Femmire": {"foto_boss": "https://i.imgur.com/ds86FSd.png", "drops": ["Capa de Água", "Swamp Crown", "Carta Femmire"]},
     "Ghostring": {"foto_boss": "https://static.divine-pride.net/images/mobs/png/1120.png", "drops": ["Ghost Bandana","Librarian's Gloves", "Carta Ghostring"]},
@@ -113,137 +107,80 @@ mini_bosses = {
 }
 lista_bosses = list(mini_bosses.keys())
 
-# ==========================================
-# 5. ESTRUTURA DE ABAS (TABS)
-# ==========================================
-aba1, aba2 = st.tabs(["⚔️ Distribuição de Equipamentos", "💰 Caixa da PT (Vendas e Zeny)"])
+aba1, aba2 = st.tabs(["⚔️ Distribuição", "💰 Caixa da PT"])
 
 # ------------------------------------------
-# ABA 1: PRIORIDADE E EQUIPAMENTOS
+# ABA 1: DISTRIBUIÇÃO (VOLTA AO DINÂMICO)
 # ------------------------------------------
 with aba1:
-    st.info("Distribua itens que os membros vão EQUIPAR usando prioridade de 1 a 5 e sorteio para desempate.")
     col1, col2, col3 = st.columns(3)
-
     for i, (boss_name, info) in enumerate(mini_bosses.items()):
         target_col = [col1, col2, col3][i % 3]
         with target_col:
-            st.markdown(f'<div class="boss-header"><img src="{info["foto_boss"]}" class="boss-photo" onerror="this.src=\'https://via.placeholder.com/32x32.png?text=?\'"><span class="boss-name">{boss_name}</span></div>', unsafe_allow_html=True)
-            
-            with st.expander(f"📦 Drops ({len(info['drops'])} itens)", expanded=False):
+            st.markdown(f'<div class="boss-header"><img src="{info["foto_boss"]}" class="boss-photo"><span class="boss-name">{boss_name}</span></div>', unsafe_allow_html=True)
+            with st.expander("📦 Drops", expanded=False):
                 for item in info["drops"]:
                     st.write(f"**{item}**")
-                    interessados = st.multiselect("Quem quer?", membros, key=f"sel_eq_{boss_name}_{item}")
+                    interessados = st.multiselect("Interessados:", membros, key=f"sel_{boss_name}_{item}")
                     
                     if interessados:
-                        cols_prio = st.columns(len(interessados))
-                        prioridades = {}
-                        for idx, p in enumerate(interessados):
-                            with cols_prio[idx]:
-                                n = st.number_input(f"Prio {p}", 1, 5, key=f"n_eq_{boss_name}_{item}_{p}")
-                                prioridades[p] = n
+                        # Prioridade instantânea
+                        cols = st.columns(len(interessados))
+                        prio_dict = {}
+                        for idx, player in enumerate(interessados):
+                            with cols[idx]:
+                                prio_dict[player] = st.selectbox(f"Prio {player}", [1,2,3,4,5], key=f"p_{boss_name}_{item}_{player}")
                         
-                        if st.button(f"🎲 Sortear", key=f"roll_eq_{boss_name}_{item}"):
+                        # Botão de Sorteio (🎲)
+                        if st.button(f"🎲 Sortear", key=f"roll_{boss_name}_{item}"):
                             sorteio = {p: random.randint(1, 100) for p in interessados}
                             st.session_state[f"last_roll_{boss_name}_{item}"] = sorteio
                         
                         if f"last_roll_{boss_name}_{item}" in st.session_state:
                             st.code(" | ".join([f"{k}: {v}" for k, v in st.session_state[f"last_roll_{boss_name}_{item}"].items()]))
                         
-                        vencedor = st.selectbox("Confirmar ganhador:", interessados, key=f"win_eq_{boss_name}_{item}")
-                        
-                        if st.button(f"✅ Registrar na Planilha", key=f"reg_eq_{boss_name}_{item}", use_container_width=True):
-                            novo_dado = pd.DataFrame([{
-                                "Data": datetime.now().strftime("%d/%m/%Y %H:%M"),
-                                "Boss": boss_name, "Item": item, "Ganhador": vencedor
-                            }])
-                            updated_df = pd.concat([df_equipamentos, novo_dado], ignore_index=True) if not df_equipamentos.empty else novo_dado
-                            conn.update(spreadsheet=URL_PLANILHA, worksheet="Equipamentos", data=updated_df)
-                            
-                            st.toast(f"Item registrado para {vencedor} na Nuvem!")
+                        # Escolha do vencedor e Registro
+                        vencedor = st.selectbox("Vencedor:", interessados, key=f"v_{boss_name}_{item}")
+                        if st.button("✅ Registrar", key=f"reg_{boss_name}_{item}", use_container_width=True):
+                            novo_item = pd.DataFrame([{"Data": datetime.now().strftime("%d/%m %H:%M"), "Boss": boss_name, "Item": item, "Ganhador": vencedor}])
+                            updated = pd.concat([df_equipamentos, novo_item], ignore_index=True) if not df_equipamentos.empty else novo_item
+                            conn.update(spreadsheet=URL_PLANILHA, worksheet="Equipamentos", data=updated)
+                            st.toast("Salvo!")
                             st.rerun()
                     st.divider()
 
-    st.divider()
-    st.subheader("📜 Histórico de Equipamentos Distribuídos (Nuvem)")
     if not df_equipamentos.empty:
+        st.subheader("📜 Histórico")
         st.dataframe(df_equipamentos, use_container_width=True, hide_index=True)
-        csv_hist = df_equipamentos.to_csv(index=False).encode('utf-8')
-        st.download_button("📥 Baixar Histórico (CSV)", csv_hist, "historico_equipamentos.csv", "text/csv")
-    else:
-        st.write("Nenhum equipamento distribuído ainda na planilha.")
 
 # ------------------------------------------
-# ABA 2: TESOURARIA (ZENY E CONTROLE DE STATUS)
+# ABA 2: CAIXA (SISTEMA RÁPIDO)
 # ------------------------------------------
 with aba2:
-    st.info("Registre drops para vender ou que ficaram com a PT. Dê um duplo-clique na tabela abaixo para alterar o Status e sincronize com a nuvem!")
-    
     with st.container(border=True):
-        st.subheader("📝 Registrar Novo Drop no Caixa")
-        
+        st.subheader("📝 Novo Drop")
         c1, c2 = st.columns(2)
-        with c1:
-            boss_venda = st.selectbox("Qual Boss?", lista_bosses, key="sel_boss_venda")
-        with c2:
-            itens_possiveis = mini_bosses[boss_venda]["drops"]
-            item_venda = st.selectbox("Qual item dropou?", itens_possiveis, key="sel_item_venda")
+        with c1: boss_v = st.selectbox("Boss", lista_bosses, key="bv")
+        with c2: item_v = st.selectbox("Item", mini_bosses[boss_v]["drops"], key="iv")
+        pt = st.multiselect("Presentes", membros, key="ptv")
         
-        pt_presente = st.multiselect("Quem estava na PT no momento do kill?", membros, key="pt_venda")
-        
-        if st.button("💾 Salvar Drop na Planilha", type="primary"):
-            if not pt_presente:
-                st.error("Selecione pelo menos uma pessoa que estava presente na PT!")
-            else:
-                novo_drop = pd.DataFrame([{
-                    "Data": datetime.now().strftime("%d/%m/%Y %H:%M"),
-                    "Boss": boss_venda,
-                    "Item": item_venda,
-                    "Presentes": ", ".join(pt_presente),
-                    "Partes": len(pt_presente),
-                    "Status": "Aguardando Venda", 
-                    "Detalhes/Valor": ""          
-                }])
-                
-                updated_tes = pd.concat([df_tesouraria, novo_drop], ignore_index=True) if not df_tesouraria.empty else novo_drop
-                conn.update(spreadsheet=URL_PLANILHA, worksheet="Tesouraria", data=updated_tes)
-                
-                st.success("Drop adicionado ao banco da PT na Nuvem!")
-                st.rerun() 
-    
-    st.divider()
-    st.subheader("💰 Inventário do Caixa (Edite dando duplo-clique)")
-    
+        if st.button("💾 Salvar no Caixa"):
+            if pt:
+                novo_c = pd.DataFrame([{"Data": datetime.now().strftime("%d/%m/%Y %H:%M"), "Boss": boss_v, "Item": item_v, "Presentes": ", ".join(pt), "Partes": len(pt), "Status": "Aguardando Venda", "Detalhes/Valor": ""}])
+                updated_c = pd.concat([df_tesouraria, novo_c], ignore_index=True) if not df_tesouraria.empty else novo_c
+                conn.update(spreadsheet=URL_PLANILHA, worksheet="Tesouraria", data=updated_c)
+                st.rerun()
+
     if not df_tesouraria.empty:
-        edited_df = st.data_editor(
-            df_tesouraria,
-            use_container_width=True,
-            hide_index=True,
-            num_rows="dynamic",
+        st.subheader("💰 Inventário")
+        editado = st.data_editor(df_tesouraria, use_container_width=True, hide_index=True, num_rows="dynamic",
             column_config={
-                "Status": st.column_config.SelectboxColumn(
-                    "Status do Item",
-                    help="O que aconteceu com esse item?",
-                    width="medium",
-                    options=["Aguardando Venda", "Vendido", "Ficou com a PT"],
-                    required=True
-                ),
-                "Detalhes/Valor": st.column_config.TextColumn(
-                    "Detalhes / Valor",
-                    help="Ex: Vendido por 10kk ou Ficou com Felippe",
-                    width="large"
-                )
+                "Status": st.column_config.SelectboxColumn("Status", options=["Aguardando Venda", "Vendido", "Ficou com a PT"]),
+                "Detalhes/Valor": st.column_config.TextColumn("Valor")
             },
             disabled=["Data", "Boss", "Item", "Presentes", "Partes"],
-            key="editor_tesouraria"
+            key="ed_tes"
         )
-        
-        if st.button("☁️ Sincronizar Edições com a Planilha", type="primary"):
-            conn.update(spreadsheet=URL_PLANILHA, worksheet="Tesouraria", data=edited_df)
-            st.success("Planilha atualizada com sucesso!")
+        if st.button("☁️ Sincronizar"):
+            conn.update(spreadsheet=URL_PLANILHA, worksheet="Tesouraria", data=editado)
             st.rerun()
-        
-        csv_tesouraria = edited_df.to_csv(index=False).encode('utf-8')
-        st.download_button("📥 Baixar Relatório do Caixa (CSV)", csv_tesouraria, "caixa_pt_zeny.csv", "text/csv")
-    else:
-        st.write("O caixa está vazio na planilha. Vão farmar!")
