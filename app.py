@@ -7,33 +7,31 @@ from datetime import datetime
 st.set_page_config(page_title="Loot Manager PT", layout="wide")
 
 # ==========================================
-# 1. CONFIGURAÇÃO DO GOOGLE SHEETS
+# 1. CONEXÃO COM GOOGLE SHEETS
 # ==========================================
 URL_PLANILHA = "https://docs.google.com/spreadsheets/d/1RJljQ7UwxKCAnP1wmpMD4ZatGSaD-eN21I5CGEnR8K8/edit?usp=sharing"
-
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 def carregar_dados(aba):
     try:
         df = conn.read(spreadsheet=URL_PLANILHA, worksheet=aba, ttl=0)
-        df = df.dropna(how="all").fillna("").astype(str)
-        return df
+        return df.dropna(how="all").fillna("").astype(str)
     except:
         return pd.DataFrame() 
 
-# Carregamento inicial de dados
+# Carregamento de dados
 df_equipamentos = carregar_dados("Equipamentos")
 df_tesouraria = carregar_dados("Tesouraria")
 df_config = carregar_dados("Config")
 
-# Fixando os membros na memória para evitar o reset chato
+# Mantém a lista de membros estável
 if not df_config.empty and "Membros" in df_config.columns:
     membros_salvos = "\n".join(df_config["Membros"].tolist())
 else:
     membros_salvos = "Isabela\nFelippe\nPlayer3"
 
 # ==========================================
-# 2. ESTILOS VISUAIS
+# 2. ESTILOS
 # ==========================================
 st.markdown("""
     <style>
@@ -54,18 +52,17 @@ st.title("😈 Os Coisaruim guild loot management")
 # 3. BARRA LATERAL
 # ==========================================
 with st.sidebar:
-    st.header("⚙️ Configurações da PT")
+    st.header("⚙️ Configurações")
     nomes_input = st.text_area("Membros da PT:", value=membros_salvos, height=250)
     membros = [m.strip() for m in nomes_input.split("\n") if m.strip()]
     
-    if st.button("💾 Salvar Lista de Membros", type="primary", use_container_width=True):
-        df_membros_novo = pd.DataFrame({"Membros": membros})
-        conn.update(spreadsheet=URL_PLANILHA, worksheet="Config", data=df_membros_novo)
+    if st.button("💾 Salvar Membros", type="primary", use_container_width=True):
+        conn.update(spreadsheet=URL_PLANILHA, worksheet="Config", data=pd.DataFrame({"Membros": membros}))
         st.success("Lista de membros fixa!")
         st.rerun()
 
 # ==========================================
-# 4. DICIONÁRIO DE BOSSES (Mesma lista sua)
+# 4. DICIONÁRIO DE BOSSES
 # ==========================================
 mini_bosses = {
     "Angeling": {"foto_boss": "https://static.divine-pride.net/images/mobs/png/1096.png", "drops": ["Cherubin Wing Shoulders", "Angeling Hat", "Carta Angeling"]},
@@ -110,7 +107,7 @@ lista_bosses = list(mini_bosses.keys())
 aba1, aba2 = st.tabs(["⚔️ Distribuição", "💰 Caixa da PT"])
 
 # ------------------------------------------
-# ABA 1: DISTRIBUIÇÃO (VOLTA AO DINÂMICO)
+# ABA 1: DISTRIBUIÇÃO
 # ------------------------------------------
 with aba1:
     col1, col2, col3 = st.columns(3)
@@ -120,67 +117,65 @@ with aba1:
             st.markdown(f'<div class="boss-header"><img src="{info["foto_boss"]}" class="boss-photo"><span class="boss-name">{boss_name}</span></div>', unsafe_allow_html=True)
             with st.expander("📦 Drops", expanded=False):
                 for item in info["drops"]:
-                    st.write(f"**{item}**")
-                    interessados = st.multiselect("Interessados:", membros, key=f"sel_{boss_name}_{item}")
-                    
-                    if interessados:
-                        # Prioridade instantânea
-                        cols = st.columns(len(interessados))
-                        prio_dict = {}
-                        for idx, player in enumerate(interessados):
-                            with cols[idx]:
-                                prio_dict[player] = st.selectbox(f"Prio {player}", [1,2,3,4,5], key=f"p_{boss_name}_{item}_{player}")
+                    with st.container():
+                        st.write(f"**{item}**")
+                        interessados = st.multiselect("Quem quer?", membros, key=f"sel_{boss_name}_{item}")
                         
-                        # Botão de Sorteio (🎲)
-                        if st.button(f"🎲 Sortear", key=f"roll_{boss_name}_{item}"):
-                            sorteio = {p: random.randint(1, 100) for p in interessados}
-                            st.session_state[f"last_roll_{boss_name}_{item}"] = sorteio
-                        
-                        if f"last_roll_{boss_name}_{item}" in st.session_state:
-                            st.code(" | ".join([f"{k}: {v}" for k, v in st.session_state[f"last_roll_{boss_name}_{item}"].items()]))
-                        
-                        # Escolha do vencedor e Registro
-                        vencedor = st.selectbox("Vencedor:", interessados, key=f"v_{boss_name}_{item}")
-                        if st.button("✅ Registrar", key=f"reg_{boss_name}_{item}", use_container_width=True):
-                            novo_item = pd.DataFrame([{"Data": datetime.now().strftime("%d/%m %H:%M"), "Boss": boss_name, "Item": item, "Ganhador": vencedor}])
-                            updated = pd.concat([df_equipamentos, novo_item], ignore_index=True) if not df_equipamentos.empty else novo_item
-                            conn.update(spreadsheet=URL_PLANILHA, worksheet="Equipamentos", data=updated)
-                            st.toast("Salvo!")
-                            st.rerun()
-                    st.divider()
+                        if interessados:
+                            c_prio = st.columns(len(interessados))
+                            prio_v = {}
+                            for idx, pl in enumerate(interessados):
+                                with c_prio[idx]:
+                                    prio_v[pl] = st.selectbox(f"Prio {pl}", [1,2,3,4,5], key=f"p_{boss_name}_{item}_{pl}")
+                            
+                            # Correção do Sorteio
+                            if st.button(f"🎲 Sortear", key=f"roll_{boss_name}_{item}"):
+                                st.session_state[f"res_{boss_name}_{item}"] = {p: random.randint(1, 100) for p in interessados}
+                            
+                            # Verifica se o resultado existe e é um dicionário antes de mostrar
+                            res_key = f"res_{boss_name}_{item}"
+                            if res_key in st.session_state and isinstance(st.session_state[res_key], dict):
+                                st.code(" | ".join([f"{k}: {v}" for k, v in st.session_state[res_key].items()]))
+                            
+                            venc = st.selectbox("Ganhador Final:", interessados, key=f"v_{boss_name}_{item}")
+                            if st.button(f"✅ Registrar {item}", key=f"reg_{boss_name}_{item}", use_container_width=True):
+                                novo = pd.DataFrame([{"Data": datetime.now().strftime("%d/%m %H:%M"), "Boss": boss_name, "Item": item, "Ganhador": venc}])
+                                df_updated = pd.concat([df_equipamentos, novo], ignore_index=True) if not df_equipamentos.empty else novo
+                                conn.update(spreadsheet=URL_PLANILHA, worksheet="Equipamentos", data=df_updated)
+                                st.toast("Salvo com sucesso!")
+                                st.rerun()
+                        st.divider()
 
     if not df_equipamentos.empty:
-        st.subheader("📜 Histórico")
+        st.subheader("📜 Histórico de Itens")
         st.dataframe(df_equipamentos, use_container_width=True, hide_index=True)
 
 # ------------------------------------------
-# ABA 2: CAIXA (SISTEMA RÁPIDO)
+# ABA 2: CAIXA DA PT
 # ------------------------------------------
 with aba2:
     with st.container(border=True):
-        st.subheader("📝 Novo Drop")
-        c1, c2 = st.columns(2)
-        with c1: boss_v = st.selectbox("Boss", lista_bosses, key="bv")
-        with c2: item_v = st.selectbox("Item", mini_bosses[boss_v]["drops"], key="iv")
-        pt = st.multiselect("Presentes", membros, key="ptv")
+        st.subheader("📝 Registrar Drop para Venda")
+        cx1, cx2 = st.columns(2)
+        with cx1: b_v = st.selectbox("Boss", lista_bosses, key="bv")
+        with cx2: i_v = st.selectbox("Item", mini_bosses[b_v]["drops"], key="iv")
+        pt = st.multiselect("Quem estava?", membros, key="ptv")
         
-        if st.button("💾 Salvar no Caixa"):
+        if st.button("💾 Salvar Drop no Caixa"):
             if pt:
-                novo_c = pd.DataFrame([{"Data": datetime.now().strftime("%d/%m/%Y %H:%M"), "Boss": boss_v, "Item": item_v, "Presentes": ", ".join(pt), "Partes": len(pt), "Status": "Aguardando Venda", "Detalhes/Valor": ""}])
-                updated_c = pd.concat([df_tesouraria, novo_c], ignore_index=True) if not df_tesouraria.empty else novo_c
-                conn.update(spreadsheet=URL_PLANILHA, worksheet="Tesouraria", data=updated_c)
+                novo_c = pd.DataFrame([{"Data": datetime.now().strftime("%d/%m/%Y %H:%M"), "Boss": b_v, "Item": i_v, "Presentes": ", ".join(pt), "Partes": len(pt), "Status": "Aguardando Venda", "Detalhes/Valor": ""}])
+                up_c = pd.concat([df_tesouraria, novo_c], ignore_index=True) if not df_tesouraria.empty else novo_c
+                conn.update(spreadsheet=URL_PLANILHA, worksheet="Tesouraria", data=up_c)
                 st.rerun()
 
     if not df_tesouraria.empty:
-        st.subheader("💰 Inventário")
         editado = st.data_editor(df_tesouraria, use_container_width=True, hide_index=True, num_rows="dynamic",
             column_config={
                 "Status": st.column_config.SelectboxColumn("Status", options=["Aguardando Venda", "Vendido", "Ficou com a PT"]),
-                "Detalhes/Valor": st.column_config.TextColumn("Valor")
+                "Detalhes/Valor": st.column_config.TextColumn("Valor/Detalhes")
             },
-            disabled=["Data", "Boss", "Item", "Presentes", "Partes"],
-            key="ed_tes"
+            disabled=["Data", "Boss", "Item", "Presentes", "Partes"], key="ed_tes"
         )
-        if st.button("☁️ Sincronizar"):
+        if st.button("☁️ Sincronizar Alterações"):
             conn.update(spreadsheet=URL_PLANILHA, worksheet="Tesouraria", data=editado)
             st.rerun()
