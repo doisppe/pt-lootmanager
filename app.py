@@ -24,6 +24,13 @@ def carregar_dados(aba):
 
 df_equipamentos = carregar_dados("Equipamentos")
 df_tesouraria = carregar_dados("Tesouraria")
+df_config = carregar_dados("Config") # <--- AQUI ELE LÊ A ABA NOVA
+
+# Lógica para carregar os membros salvos ou usar o padrão
+if not df_config.empty and "Membros" in df_config.columns:
+    membros_salvos = "\n".join(df_config["Membros"].tolist())
+else:
+    membros_salvos = "Isabela\nFelippe\nPlayer3"
 
 # ==========================================
 # 2. ESTILOS VISUAIS E CSS
@@ -48,11 +55,20 @@ st.title("😈 Os Coisaruim guild loot management")
 # ==========================================
 with st.sidebar:
     st.header("⚙️ Configurações da PT")
-    nomes_input = st.text_area("Membros da PT (um por linha):", value="Isabela\nFelippe\nPlayer3")
+    
+    # O valor inicial agora vem da planilha
+    nomes_input = st.text_area("Membros da PT (um por linha):", value=membros_salvos, height=250)
     membros = [m.strip() for m in nomes_input.split("\n") if m.strip()]
     
+    # === OLHA O BOTÃO AQUI! ===
+    if st.button("💾 Salvar Lista de Membros", type="primary", use_container_width=True):
+        df_membros_novo = pd.DataFrame({"Membros": membros})
+        conn.update(spreadsheet=URL_PLANILHA, worksheet="Config", data=df_membros_novo)
+        st.success("Lista de membros atualizada na nuvem!")
+        st.rerun()
+    
     st.divider()
-    st.caption("ℹ️ Os dados agora são salvos na nuvem (Google Sheets). Edições no histórico devem ser feitas diretamente na planilha ou via aba Caixa da PT.")
+    st.caption("ℹ️ Os dados são salvos no Google Sheets. Use o botão acima para fixar os membros.")
 
 # ==========================================
 # 4. DICIONÁRIO COMPLETO DE MINI BOSSES
@@ -199,12 +215,11 @@ with aba2:
     st.subheader("💰 Inventário do Caixa (Edite dando duplo-clique)")
     
     if not df_tesouraria.empty:
-        # Cria a tabela interativa (data_editor) com a nova linha num_rows="dynamic"
         edited_df = st.data_editor(
             df_tesouraria,
             use_container_width=True,
             hide_index=True,
-            num_rows="dynamic", # LINHA ADICIONADA PARA PERMITIR EXCLUSÃO E INSERÇÃO MANUAL
+            num_rows="dynamic",
             column_config={
                 "Status": st.column_config.SelectboxColumn(
                     "Status do Item",
@@ -223,7 +238,6 @@ with aba2:
             key="editor_tesouraria"
         )
         
-        # Botão para salvar edições manuais ou exclusões feitas na tabela
         if st.button("☁️ Sincronizar Edições com a Planilha", type="primary"):
             conn.update(spreadsheet=URL_PLANILHA, worksheet="Tesouraria", data=edited_df)
             st.success("Planilha atualizada com sucesso!")
