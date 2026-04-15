@@ -8,27 +8,22 @@ import time
 st.set_page_config(page_title="Loot Manager PT", layout="wide")
 
 # ==========================================
-# 1. CONEXÃO E CACHE (PARA EVITAR ERRO 429)
+# 1. CONEXÃO E CARREGAMENTO
 # ==========================================
 URL_PLANILHA = "https://docs.google.com/spreadsheets/d/1RJljQ7UwxKCAnP1wmpMD4ZatGSaD-eN21I5CGEnR8K8/edit?usp=sharing"
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-# Cache de 15 segundos para evitar que acessos simultâneos derrubem a API
 def carregar_dados(aba):
     try:
-        df = conn.read(spreadsheet=URL_PLANILHA, worksheet=aba, ttl=15)
+        df = conn.read(spreadsheet=URL_PLANILHA, worksheet=aba, ttl=5)
         return df.dropna(how="all").fillna("").astype(str)
     except:
         return pd.DataFrame() 
 
-# Carregamento inicial
-if 'df_interesses' not in st.session_state:
-    st.session_state.df_interesses = carregar_dados("Interesses")
-
 df_equipamentos = carregar_dados("Equipamentos")
 df_tesouraria = carregar_dados("Tesouraria")
 df_config = carregar_dados("Config")
-df_interesses = st.session_state.df_interesses
+df_interesses = carregar_dados("Interesses")
 
 if not df_config.empty and "Membros" in df_config.columns:
     membros_salvos = "\n".join(df_config["Membros"].tolist())
@@ -48,7 +43,6 @@ st.markdown("""
     .boss-photo { width: 32px; height: 32px; margin-right: 10px; border-radius: 5px; object-fit: contain; }
     .boss-name { font-size: 1.1rem; font-weight: bold; margin: 0; }
     .stExpander { border-radius: 0 0 10px 10px !important; border: 1px solid #444 !important; margin-bottom: 15px; }
-    .stButton>button { width: 100%; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -62,9 +56,9 @@ with st.sidebar:
     nomes_input = st.text_area("Membros da PT:", value=membros_salvos, height=250)
     membros = [m.strip() for m in nomes_input.split("\n") if m.strip()]
     
-    if st.button("💾 Salvar Membros"):
+    if st.button("💾 Salvar Membros", type="primary", use_container_width=True):
         conn.update(spreadsheet=URL_PLANILHA, worksheet="Config", data=pd.DataFrame({"Membros": membros}))
-        st.success("Salvo!")
+        st.success("Lista salva!")
         st.rerun()
 
 # ==========================================
@@ -113,17 +107,16 @@ lista_bosses = list(mini_bosses.keys())
 aba1, aba2 = st.tabs(["⚔️ Distribuição", "💰 Caixa da PT"])
 
 # ------------------------------------------
-# ABA 1: DISTRIBUIÇÃO
+# ABA 1: DISTRIBUIÇÃO (FIXED WISHLIST)
 # ------------------------------------------
 with aba1:
-    # BOTÃO MESTRE DE SALVAMENTO
-    st.warning("⚠️ Mude os interesses abaixo e clique neste botão azul para salvar a Wishlist da PT inteira de uma vez!")
-    if st.button("☁️ SALVAR TODAS AS WISHLISTS NA PLANILHA", type="primary"):
-        with st.spinner("Sincronizando com o Google..."):
-            conn.update(spreadsheet=URL_PLANILHA, worksheet="Interesses", data=st.session_state.df_interesses.fillna(""))
-            st.success("Wishlist da guilda atualizada com sucesso!")
-            time.sleep(1)
-            st.rerun()
+    st.info("Wishlist: Os nomes salvos ficam fixos. Ao registrar o drop, o ganhador sai da lista.")
+    
+    # Botão de Sincronização Geral (Opcional, mas ajuda no erro 429)
+    if st.button("☁️ SALVAR TODAS AS WISHLISTS (Mestre)", type="primary"):
+        conn.update(spreadsheet=URL_PLANILHA, worksheet="Interesses", data=df_interesses.fillna(""))
+        st.success("Tudo sincronizado!")
+        st.rerun()
 
     col1, col2, col3 = st.columns(3)
     
@@ -132,49 +125,64 @@ with aba1:
         with target_col:
             st.markdown(f'<div class="boss-header"><img src="{info["foto_boss"]}" class="boss-photo"><span class="boss-name">{boss_name}</span></div>', unsafe_allow_html=True)
             with st.expander(f"📦 Drops", expanded=False):
+                
+                # Criamos um dicionário local para este Boss para não perder dados ao processar
+                interesses_atuais_boss = {}
+                
                 for item in info["drops"]:
                     st.write(f"**{item}**")
                     key_item = f"{boss_name}_{item}"
                     
-                    # Busca na memória local (session_state)
-                    if key_item in st.session_state.df_interesses.columns:
-                        def_int = [x for x in st.session_state.df_interesses[key_item].tolist() if x and x in membros]
+                    # Busca interessados salvos
+                    if not df_interesses.empty and key_item in df_interesses.columns:
+                        def_int = [x for x in df_interesses[key_item].tolist() if x and x in membros]
                     else:
                         def_int = []
 
-                    # Atualiza a memória local conforme o usuário mexe
-                    interessados = st.multiselect("Wishlist:", membros, default=def_int, key=f"sel_{boss_name}_{item}")
-                    st.session_state.df_interesses[key_item] = pd.Series(interessados)
-
-                    if interessados:
-                        c_prio = st.columns(len(interessados))
-                        for idx, pl in enumerate(interessados):
+                    interesses_atuais_boss[key_item] = st.multiselect("Wishlist:", membros, default=def_int, key=f"sel_{boss_name}_{item}")
+                    
+                    if interesses_atuais_boss[key_item]:
+                        c_prio = st.columns(len(interesses_atuais_boss[key_item]))
+                        for idx, pl in enumerate(interesses_atuais_boss[key_item]):
                             with c_prio[idx]:
                                 st.selectbox(f"Prio {pl}", [1,2,3,4,5], key=f"p_{boss_name}_{item}_{pl}")
                         
-                        if st.button(f"🎲 Sortear", key=f"roll_{boss_name}_{item}"):
-                            st.session_state[f"res_{boss_name}_{item}"] = {p: random.randint(1, 100) for p in interessados}
+                        if st.button(f"🎲 Sortear {item}", key=f"roll_{boss_name}_{item}"):
+                            st.session_state[f"res_{boss_name}_{item}"] = {p: random.randint(1, 100) for p in interesses_atuais_boss[key_item]}
                         
                         res_key = f"res_{boss_name}_{item}"
                         if res_key in st.session_state and isinstance(st.session_state[res_key], dict):
                             st.code(" | ".join([f"{k}: {v}" for k, v in st.session_state[res_key].items()]))
                         
-                        venc = st.selectbox("Quem levou?", interessados, key=f"v_{boss_name}_{item}")
-                        if st.button(f"✅ Registrar Drop", key=f"reg_{boss_name}_{item}"):
-                            # 1. Histórico
+                        venc = st.selectbox("Quem levou?", interesses_atuais_boss[key_item], key=f"v_{boss_name}_{item}")
+                        
+                        # Botão REGISTRAR DROP (Sorteio e Limpeza da Wishlist)
+                        if st.button(f"✅ Registrar Drop: {item}", key=f"reg_{boss_name}_{item}", use_container_width=True):
+                            # 1. Salva no Histórico
                             novo = pd.DataFrame([{"Data": datetime.now().strftime("%d/%m %H:%M"), "Boss": boss_name, "Item": item, "Ganhador": venc}])
                             df_up = pd.concat([df_equipamentos, novo], ignore_index=True) if not df_equipamentos.empty else novo
                             conn.update(spreadsheet=URL_PLANILHA, worksheet="Equipamentos", data=df_up)
                             
-                            # 2. Limpa na memória local e salva
-                            restantes = [p for p in interessados if p != venc]
-                            st.session_state.df_interesses[key_item] = pd.Series(restantes)
-                            conn.update(spreadsheet=URL_PLANILHA, worksheet="Interesses", data=st.session_state.df_interesses.fillna(""))
+                            # 2. Limpa da Wishlist na Planilha
+                            restantes = [p for p in interesses_atuais_boss[key_item] if p != venc]
+                            df_interesses[key_item] = pd.Series(restantes)
+                            conn.update(spreadsheet=URL_PLANILHA, worksheet="Interesses", data=df_interesses.fillna(""))
                             
-                            st.success(f"Registrado! {venc} saiu da lista.")
+                            st.success(f"Salvo! {venc} removido da lista.")
                             time.sleep(1)
                             st.rerun()
                     st.divider()
+
+                # BOTÃO PARA SALVAR A WISHLIST DESTE BOSS ESPECÍFICO (FIXAR)
+                if st.button(f"📌 Salvar Wishlist de {boss_name}", key=f"fix_boss_{boss_name}", type="primary"):
+                    # Atualiza o DataFrame global com todas as seleções desse boss
+                    for k_it, lista_p in interesses_atuais_boss.items():
+                        df_interesses[k_it] = pd.Series(lista_p)
+                    
+                    conn.update(spreadsheet=URL_PLANILHA, worksheet="Interesses", data=df_interesses.fillna(""))
+                    st.toast(f"Wishlist de {boss_name} atualizada!")
+                    time.sleep(1)
+                    st.rerun()
 
     if not df_equipamentos.empty:
         st.subheader("📜 Histórico")
