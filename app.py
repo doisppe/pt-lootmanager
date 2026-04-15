@@ -3,28 +3,29 @@ from streamlit_gsheets import GSheetsConnection
 import random
 import pandas as pd
 from datetime import datetime
+import time
 
 st.set_page_config(page_title="Loot Manager PT", layout="wide")
 
 # ==========================================
-# 1. CONEXÃO COM GOOGLE SHEETS
+# 1. CONEXÃO E CARREGAMENTO (COM CACHE)
 # ==========================================
 URL_PLANILHA = "https://docs.google.com/spreadsheets/d/1RJljQ7UwxKCAnP1wmpMD4ZatGSaD-eN21I5CGEnR8K8/edit?usp=sharing"
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 def carregar_dados(aba):
     try:
-        df = conn.read(spreadsheet=URL_PLANILHA, worksheet=aba, ttl=0)
+        # Usamos ttl=2 para evitar o erro 429 do Google (limite de requisições)
+        df = conn.read(spreadsheet=URL_PLANILHA, worksheet=aba, ttl=2)
         return df.dropna(how="all").fillna("").astype(str)
-    except:
+    except Exception as e:
         return pd.DataFrame() 
 
-# Carregamento de dados
 df_equipamentos = carregar_dados("Equipamentos")
 df_tesouraria = carregar_dados("Tesouraria")
 df_config = carregar_dados("Config")
+df_interesses = carregar_dados("Interesses")
 
-# Mantém a lista de membros estável
 if not df_config.empty and "Membros" in df_config.columns:
     membros_salvos = "\n".join(df_config["Membros"].tolist())
 else:
@@ -111,57 +112,81 @@ aba1, aba2 = st.tabs(["⚔️ Distribuição", "💰 Caixa da PT"])
 # ------------------------------------------
 with aba1:
     col1, col2, col3 = st.columns(3)
+    
     for i, (boss_name, info) in enumerate(mini_bosses.items()):
         target_col = [col1, col2, col3][i % 3]
         with target_col:
             st.markdown(f'<div class="boss-header"><img src="{info["foto_boss"]}" class="boss-photo"><span class="boss-name">{boss_name}</span></div>', unsafe_allow_html=True)
             with st.expander("📦 Drops", expanded=False):
                 for item in info["drops"]:
-                    with st.container():
-                        st.write(f"**{item}**")
-                        interessados = st.multiselect("Quem quer?", membros, key=f"sel_{boss_name}_{item}")
+                    st.write(f"**{item}**")
+                    
+                    key_item = f"{boss_name}_{item}"
+                    # Carrega wishlist salva
+                    if not df_interesses.empty and key_item in df_interesses.columns:
+                        default_interessados = [x for x in df_interesses[key_item].tolist() if x and x in membros]
+                    else:
+                        default_interessados = []
+
+                    interessados = st.multiselect("Quem quer? (Wishlist)", membros, default=default_interessados, key=f"sel_{boss_name}_{item}")
+                    
+                    if st.button("📌 Salvar Wishlist", key=f"fix_{boss_name}_{item}"):
+                        new_interesses = df_interesses.copy()
+                        new_interesses[key_item] = pd.Series(interessados)
+                        conn.update(spreadsheet=URL_PLANILHA, worksheet="Interesses", data=new_interesses.fillna(""))
+                        st.toast("Wishlist salva!")
+                        time.sleep(1)
+                        st.rerun()
+
+                    if interessados:
+                        # PRIORIDADES VOLTARAM AQUI:
+                        c_prio = st.columns(len(interessados))
+                        prio_v = {}
+                        for idx, pl in enumerate(interessados):
+                            with c_prio[idx]:
+                                prio_v[pl] = st.selectbox(f"Prio {pl}", [1,2,3,4,5], key=f"p_{boss_name}_{item}_{pl}")
                         
-                        if interessados:
-                            c_prio = st.columns(len(interessados))
-                            prio_v = {}
-                            for idx, pl in enumerate(interessados):
-                                with c_prio[idx]:
-                                    prio_v[pl] = st.selectbox(f"Prio {pl}", [1,2,3,4,5], key=f"p_{boss_name}_{item}_{pl}")
+                        if st.button(f"🎲 Sortear", key=f"roll_{boss_name}_{item}"):
+                            st.session_state[f"res_{boss_name}_{item}"] = {p: random.randint(1, 100) for p in interessados}
+                        
+                        res_key = f"res_{boss_name}_{item}"
+                        if res_key in st.session_state and isinstance(st.session_state[res_key], dict):
+                            st.code(" | ".join([f"{k}: {v}" for k, v in st.session_state[res_key].items()]))
+                        
+                        venc = st.selectbox("Quem levou?", interessados, key=f"v_{boss_name}_{item}")
+                        if st.button(f"✅ Registrar Drop", key=f"reg_{boss_name}_{item}", use_container_width=True):
+                            # Salva Historico
+                            novo = pd.DataFrame([{"Data": datetime.now().strftime("%d/%m %H:%M"), "Boss": boss_name, "Item": item, "Ganhador": venc}])
+                            df_updated = pd.concat([df_equipamentos, novo], ignore_index=True) if not df_equipamentos.empty else novo
+                            conn.update(spreadsheet=URL_PLANILHA, worksheet="Equipamentos", data=df_updated)
                             
-                            # Correção do Sorteio
-                            if st.button(f"🎲 Sortear", key=f"roll_{boss_name}_{item}"):
-                                st.session_state[f"res_{boss_name}_{item}"] = {p: random.randint(1, 100) for p in interessados}
+                            # Limpa Wishlist
+                            restantes = [p for p in interessados if p != venc]
+                            nova_wishlist = df_interesses.copy()
+                            nova_wishlist[key_item] = pd.Series(restantes)
+                            conn.update(spreadsheet=URL_PLANILHA, worksheet="Interesses", data=nova_wishlist.fillna(""))
                             
-                            # Verifica se o resultado existe e é um dicionário antes de mostrar
-                            res_key = f"res_{boss_name}_{item}"
-                            if res_key in st.session_state and isinstance(st.session_state[res_key], dict):
-                                st.code(" | ".join([f"{k}: {v}" for k, v in st.session_state[res_key].items()]))
-                            
-                            venc = st.selectbox("Ganhador Final:", interessados, key=f"v_{boss_name}_{item}")
-                            if st.button(f"✅ Registrar {item}", key=f"reg_{boss_name}_{item}", use_container_width=True):
-                                novo = pd.DataFrame([{"Data": datetime.now().strftime("%d/%m %H:%M"), "Boss": boss_name, "Item": item, "Ganhador": venc}])
-                                df_updated = pd.concat([df_equipamentos, novo], ignore_index=True) if not df_equipamentos.empty else novo
-                                conn.update(spreadsheet=URL_PLANILHA, worksheet="Equipamentos", data=df_updated)
-                                st.toast("Salvo com sucesso!")
-                                st.rerun()
-                        st.divider()
+                            st.success(f"Registrado!")
+                            time.sleep(1)
+                            st.rerun()
+                    st.divider()
 
     if not df_equipamentos.empty:
-        st.subheader("📜 Histórico de Itens")
+        st.subheader("📜 Histórico")
         st.dataframe(df_equipamentos, use_container_width=True, hide_index=True)
 
 # ------------------------------------------
-# ABA 2: CAIXA DA PT
+# ABA 2: CAIXA
 # ------------------------------------------
 with aba2:
     with st.container(border=True):
-        st.subheader("📝 Registrar Drop para Venda")
+        st.subheader("📝 Registrar Venda")
         cx1, cx2 = st.columns(2)
         with cx1: b_v = st.selectbox("Boss", lista_bosses, key="bv")
         with cx2: i_v = st.selectbox("Item", mini_bosses[b_v]["drops"], key="iv")
         pt = st.multiselect("Quem estava?", membros, key="ptv")
         
-        if st.button("💾 Salvar Drop no Caixa"):
+        if st.button("💾 Salvar no Caixa"):
             if pt:
                 novo_c = pd.DataFrame([{"Data": datetime.now().strftime("%d/%m/%Y %H:%M"), "Boss": b_v, "Item": i_v, "Presentes": ", ".join(pt), "Partes": len(pt), "Status": "Aguardando Venda", "Detalhes/Valor": ""}])
                 up_c = pd.concat([df_tesouraria, novo_c], ignore_index=True) if not df_tesouraria.empty else novo_c
