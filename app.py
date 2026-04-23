@@ -2,30 +2,33 @@ import streamlit as st
 from streamlit_gsheets import GSheetsConnection
 import random
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timedelta
 import time
+import re
 
 st.set_page_config(page_title="Loot Manager PT", layout="wide")
 
 # ==========================================
-# 1. CONEXÃO E CARREGAMENTO
+# 1. CONEXÕES
 # ==========================================
 URL_PLANILHA = "https://docs.google.com/spreadsheets/d/1RJljQ7UwxKCAnP1wmpMD4ZatGSaD-eN21I5CGEnR8K8/edit?usp=sharing"
+URL_HORARIOS = "https://docs.google.com/spreadsheets/d/1gZoG2NVeY3KlJFGfoq1nVqjylLIalDXygmOmyXRgWy4/edit?usp=sharing"
+
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-def carregar_dados(aba):
+def carregar_dados(url, aba=None):
     try:
-        # ttl=10 para dar fôlego ao Google quando muita gente acessa
-        df = conn.read(spreadsheet=URL_PLANILHA, worksheet=aba, ttl=10)
+        if aba: df = conn.read(spreadsheet=url, worksheet=aba, ttl=10)
+        else: df = conn.read(spreadsheet=url, ttl=10)
         return df.dropna(how="all").fillna("").astype(str)
     except:
         return pd.DataFrame() 
 
-# Carregamento inicial de dados
-df_equipamentos = carregar_dados("Equipamentos")
-df_tesouraria = carregar_dados("Tesouraria")
-df_config = carregar_dados("Config")
-df_interesses_db = carregar_dados("Interesses")
+df_equipamentos = carregar_dados(URL_PLANILHA, "Equipamentos")
+df_tesouraria = carregar_dados(URL_PLANILHA, "Tesouraria")
+df_config = carregar_dados(URL_PLANILHA, "Config")
+df_interesses_db = carregar_dados(URL_PLANILHA, "Interesses")
+df_horarios_bruto = carregar_dados(URL_HORARIOS)
 
 if not df_config.empty and "Membros" in df_config.columns:
     membros_salvos = "\n".join(df_config["Membros"].tolist())
@@ -33,41 +36,7 @@ else:
     membros_salvos = "Isabela\nFelippe\nPlayer3"
 
 # ==========================================
-# 2. ESTILOS VISUAIS
-# ==========================================
-st.markdown("""
-    <style>
-    .stApp { background-color: #0e1117; color: #ffffff; }
-    .boss-header {
-        background-color: #1e2329; padding: 10px; border-radius: 10px 10px 0 0;
-        display: flex; align-items: center; border: 1px solid #444;
-    }
-    .boss-photo { width: 32px; height: 32px; margin-right: 10px; border-radius: 5px; object-fit: contain; }
-    .boss-name { font-size: 1.1rem; font-weight: bold; margin: 0; }
-    .stExpander { border-radius: 0 0 10px 10px !important; border: 1px solid #444 !important; margin-bottom: 15px; }
-    .main-save-container {
-        background-color: #1e2329; padding: 20px; border-radius: 10px; border: 1px solid #ff4b4b; margin-bottom: 20px;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-
-st.title("😈 Os Coisaruim guild loot management")
-
-# ==========================================
-# 3. BARRA LATERAL
-# ==========================================
-with st.sidebar:
-    st.header("⚙️ Configurações")
-    nomes_input = st.text_area("Membros da PT:", value=membros_salvos, height=250)
-    membros = [m.strip() for m in nomes_input.split("\n") if m.strip()]
-    
-    if st.button("💾 Salvar Membros"):
-        conn.update(spreadsheet=URL_PLANILHA, worksheet="Config", data=pd.DataFrame({"Membros": membros}))
-        st.success("Lista salva!")
-        st.rerun()
-
-# ==========================================
-# 4. DICIONÁRIO DE BOSSES
+# 2. DICIONÁRIO DE BOSSES ORIGINAL
 # ==========================================
 mini_bosses = {
     "Angeling": {"foto_boss": "https://static.divine-pride.net/images/mobs/png/1096.png", "drops": ["Cherubin Wing Shoulders", "Angeling Hat", "Carta Angeling"]},
@@ -105,110 +74,215 @@ mini_bosses = {
     "Vagabond Wolf": {"foto_boss": "https://static.divine-pride.net/images/mobs/png/21326.png", "drops": ["Drooping Baby Wolf", "Wolf Fur Coat", "Carta Vagabond Wolf"]},
     "Vocal": {"foto_boss": "https://static.divine-pride.net/images/mobs/png/21327.png", "drops": ["Quaver", "Sound Amplifier", "Carta Vocal"]},
     "Vodyanoy": {"foto_boss": "https://i.imgur.com/iyTuoCm.png", "drops": ["Magic Stone Ring", "Skin of Lindwyrmm", "Carta Vodyanoy"]},
-    "Zealotus": {"foto_boss": "https://static.divine-pride.net/images/mobs/png/1200.png", "drops": ["Zealotus Doll", "Handcuffs", "Carta Zealotus"]}
-}
-lista_bosses = list(mini_bosses.keys())
+    "Zealotus": {"foto_boss": "https://static.divine-pride.net/images/mobs/png/1200.png", "drops": ["Zealotus Doll", "Handcuffs", "Carta Zealotus"]},
+    "Ancestral Warden": {
+        "foto_boss": "https://static.divine-pride.net/images/mobs/png/20277.png", 
+        "drops": ["Shoulder Protector", "Woodbone Shield", "Ancestral Warden card"]
+    },
+    "Blasphemous Ritual": {
+        "foto_boss": "https://static.divine-pride.net/images/mobs/png/1957.png", 
+        "drops": ["Thornbush Hairband", "Doom Bible", "Blasphemous Ritual card"]
+    },
+    "Blightwalker": {
+        "foto_boss": "https://static.divine-pride.net/images/mobs/png/20420.png", 
+        "drops": ["Ronin's Kosode", "Corrupted Geta", "Blightwalker Card"]
+    },
+    "Bramblehare": {
+        "foto_boss": "https://static.divine-pride.net/images/mobs/png/2336.png", 
+        "drops": ["Shield de Terra", "Jumping Manteau", "Bramblehare card"]
+    },
+    "Tiki Kanaloa": {
+        "foto_boss": "https://wikimirror.lifeto.co/asset.103.ggftw.net/wiki/to-w/images/6/68/Ancient_Hero_Statue.gif", 
+        "drops": ["Plastic Straw", "Tiki Talisman", "Tiki Kalanoa card"]
+    },
+    "Twinjaw": {
+        "foto_boss": "https://static.divine-pride.net/images/mobs/png/1618.png", 
+        "drops": ["Carapace Armor", "Twinjaw Axe", "Twinjaw card"]
+    },
+    "Twisted Twilight": {
+        "foto_boss": "https://static.divine-pride.net/images/mobs/png/1681.png", 
+        "drops": ["Dimensional Communicator", "Twilight Boots", "Twisted Twilight card"]
+    },
+    "Werewolf": {
+        "foto_boss": "https://static.divine-pride.net/images/mobs/png/1022.png", 
+        "drops": ["Ulle's Cap", "Beast Bone Bow", "Werewolf Card"]
+    },
 
-aba1, aba2 = st.tabs(["⚔️ Distribuição", "💰 Caixa da PT"])
+    "Shiosen": {
+        "foto_boss": "https://static.divine-pride.net/images/mobs/png/2254.png", 
+        "drops": ["Shiled de Água", "Ethernal Harmony", "Shiosen Scroll", "Shiosen Card"]
+    },
+
+    "Sludge Abomination": {
+        "foto_boss": "https://static.divine-pride.net/images/mobs/png/1366.png", 
+        "drops": ["Chemical Amalgam", "Chemistry Kit", "Sludge Abomination card"]
+    },
+
+    "Rotbloom": {
+        "foto_boss": "https://static.divine-pride.net/images/mobs/png/2906.png", 
+        "drops": ["Apothecary Robe", "Addiction Plant", "Rotbloom card"]
+    },
+    "Possessed Marble Idol": {
+        "foto_boss": "https://www.spriters-resource.com/media/asset_icons/21/23101.png", 
+        "drops": ["Marble Pillar", "Marble Mask", "Possessed Marble Idol card"]
+    },
+}
+
+
+# ==========================================
+# 2.5 O EXTRATOR EM MATRIZ 
+# ==========================================
+cronograma_por_hora = {} 
+cronograma_por_boss = {} 
+
+if not df_horarios_bruto.empty:
+    colunas = df_horarios_bruto.columns.tolist()
+    
+    for idx, row in df_horarios_bruto.iterrows():
+        val_primeira_col = str(row.iloc[0]).strip()
+        match_hora = re.search(r'(\d{1,2}:\d{2})', val_primeira_col)
+        
+        if match_hora:
+            try:
+                h_obj = datetime.strptime(match_hora.group(1), "%H:%M")
+                hora_formatada = h_obj.strftime("%H:%M")
+                bosses_da_linha = []
+                
+                for col_name in colunas[1:]:
+                    val_cell = str(row[col_name]).strip().lower()
+                    if val_cell == 'sim':
+                        b_name = str(col_name).strip()
+                        if len(b_name) > 2 and "unnamed" not in b_name.lower():
+                            bosses_da_linha.append(b_name)
+                
+                if bosses_da_linha:
+                    if hora_formatada not in cronograma_por_hora:
+                        cronograma_por_hora[hora_formatada] = set()
+                    cronograma_por_hora[hora_formatada].update(bosses_da_linha)
+                    
+                    for b in bosses_da_linha:
+                        if b not in cronograma_por_boss:
+                            cronograma_por_boss[b] = set()
+                        cronograma_por_boss[b].add(hora_formatada)
+                        
+                        if b not in mini_bosses:
+                            mini_bosses[b] = {
+                                "foto_boss": "https://via.placeholder.com/32x32.png?text=?", 
+                                "drops": ["Drop Desconhecido"]
+                            }
+            except:
+                pass
+
+lista_bosses = sorted(list(mini_bosses.keys()))
+
+# ==========================================
+# 3. ESTILOS VISUAIS E TABELAS HTML
+# ==========================================
+st.markdown("""
+    <style>
+    .stApp { background-color: #0e1117; color: #ffffff; }
+    .boss-header { background-color: #1e2329; padding: 10px; border-radius: 10px 10px 0 0; display: flex; align-items: center; border: 1px solid #444; }
+    .boss-photo { width: 32px; height: 32px; margin-right: 10px; border-radius: 5px; object-fit: contain; }
+    .stExpander { border-radius: 0 0 10px 10px !important; border: 1px solid #444 !important; margin-bottom: 15px; }
+    .main-save-container { background-color: #1e2329; padding: 20px; border-radius: 10px; border: 1px solid #58a6ff; margin-bottom: 20px; }
+    
+    .matrix-table { width: 100%; border-collapse: collapse; font-family: monospace; font-size: 1.1rem; text-align: center; margin-top: 15px; }
+    .matrix-table th, .matrix-table td { border: 3px solid #30363d; padding: 10px; vertical-align: middle; text-align: center; }
+    .matrix-table th { background-color: #21262d; color: #58a6ff; }
+    
+    .cell-boss-title { background-color: #21262d; color: #58a6ff; font-weight: bold; font-size: 1.2rem; width: 20%; text-align: center; }
+    
+    .cell-time-vivo { background-color: #238636; color: #ffffff; font-weight: bold; border: 2px solid #2ea043; width: 16%; text-align: center; }
+    .cell-time-breve { background-color: #d29922; color: #ffffff; font-weight: bold; border: 2px solid #e3b341; width: 16%; text-align: center; }
+    .cell-time-morto { background-color: #161b22; color: #8b949e; width: 16%; text-align: center; }
+    
+    .status-vivo { background-color: #0f2b16 !important; }
+    .status-vivo td { color: #7ee787 !important; border-color: #238636 !important; font-weight: bold; }
+    .status-breve { background-color: #3d2e04 !important; }
+    .status-breve td { color: #e3b341 !important; border-color: #d29922 !important; font-weight: bold; }
+    .status-morto { background-color: transparent; }
+    
+    .icon-table { width: 24px; height: 24px; border-radius: 4px; vertical-align: middle; margin-right: 8px; }
+    .icon-large { width: 48px; height: 48px; border-radius: 8px; margin-bottom: 8px; }
+    </style>
+    """, unsafe_allow_html=True)
+
+st.title("😈 Os Coisaruim guild management")
+
+# ==========================================
+# 4. BARRA LATERAL
+# ==========================================
+with st.sidebar:
+    st.header("⚙️ Configurações")
+    nomes_input = st.text_area("Membros da PT:", value=membros_salvos, height=250)
+    membros = [m.strip() for m in nomes_input.split("\n") if m.strip()]
+    if st.button("💾 Salvar Membros"):
+        conn.update(spreadsheet=URL_PLANILHA, worksheet="Config", data=pd.DataFrame({"Membros": membros}))
+        st.success("Lista salva!")
+        st.rerun()
+
+aba1, aba2, aba3 = st.tabs(["⚔️ Distribuição", "💰 Caixa da PT", "⏰ Matriz de Respawn"])
 
 # ------------------------------------------
-# ABA 1: DISTRIBUIÇÃO (WISHLIST GLOBAL)
+# ABA 1: DISTRIBUIÇÃO
 # ------------------------------------------
 with aba1:
-    # --- BOTÃO MESTRE NO TOPO ---
     st.markdown('<div class="main-save-container">', unsafe_allow_html=True)
     st.subheader("📌 Controle de Wishlist Global")
-    st.info("Marque quem quer cada item em todos os bosses abaixo. Quando terminar, clique no botão azul para salvar tudo na nuvem de uma vez.")
-    
-    # Preparamos um dicionário para coletar todos os interesses da tela
-    todos_os_interesses_na_tela = []
-
-    if st.button("☁️ SALVAR TODAS AS WISHLISTS NA PLANILHA", type="primary", use_container_width=True):
-        # Esta parte do código vai rodar quando o botão for clicado.
-        # Precisamos reconstruir a tabela com o que está nos seletores da tela.
-        # O Streamlit faz isso automaticamente através das chaves (keys).
-        progress_text = "Sincronizando com o Google Sheets... Por favor, aguarde."
-        my_bar = st.progress(0, text=progress_text)
-        
-        registros_para_salvar = []
+    if st.button("☁️ SALVAR TODAS AS WISHLISTS", type="primary", use_container_width=True):
+        reg = []
         for boss, info in mini_bosses.items():
             for item in info["drops"]:
-                key = f"sel_{boss}_{item}"
-                if key in st.session_state:
-                    for membro_interessado in st.session_state[key]:
-                        registros_para_salvar.append({"Item": f"{boss}_{item}", "Membro": membro_interessado})
-        
-        df_para_enviar = pd.DataFrame(registros_para_salvar)
-        conn.update(spreadsheet=URL_PLANILHA, worksheet="Interesses", data=df_para_enviar)
-        
-        my_bar.progress(100, text="Sincronizado com sucesso!")
-        time.sleep(1)
+                if f"sel_{boss}_{item}" in st.session_state:
+                    for m in st.session_state[f"sel_{boss}_{item}"]:
+                        reg.append({"Item": f"{boss}_{item}", "Membro": m})
+        df_send = pd.DataFrame(reg, columns=["Item", "Membro"])
+        conn.update(spreadsheet=URL_PLANILHA, worksheet="Interesses", data=df_send)
+        st.success("Sincronizado! (Lembre de apagar as colunas velhas na planilha se ainda estiverem lá)")
+        time.sleep(2)
         st.rerun()
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # --- LISTAGEM DOS BOSSES ---
     col1, col2, col3 = st.columns(3)
-    
     for i, (boss_name, info) in enumerate(mini_bosses.items()):
         target_col = [col1, col2, col3][i % 3]
         with target_col:
-            st.markdown(f'<div class="boss-header"><img src="{info["foto_boss"]}" class="boss-photo"><span class="boss-name">{boss_name}</span></div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="boss-header"><img src="{info["foto_boss"]}" class="boss-photo" onerror="this.src=\'https://via.placeholder.com/32\'"><span class="boss-name">{boss_name}</span></div>', unsafe_allow_html=True)
             with st.expander(f"📦 Drops", expanded=False):
                 for item in info["drops"]:
                     st.write(f"**{item}**")
                     key_item = f"{boss_name}_{item}"
                     
-                    # Carrega default da planilha
-                    if not df_interesses_db.empty:
+                    if not df_interesses_db.empty and "Item" in df_interesses_db.columns:
                         def_int = df_interesses_db[df_interesses_db["Item"] == key_item]["Membro"].tolist()
-                        # Garante que só carrega membros que ainda existem na PT
                         def_int = [m for m in def_int if m in membros]
                     else:
                         def_int = []
 
-                    # Campo de seleção (Multiselect)
-                    interessados_agora = st.multiselect(
-                        "Interessados:", 
-                        membros, 
-                        default=def_int, 
-                        key=f"sel_{boss_name}_{item}"
-                    )
+                    int_agora = st.multiselect("Interessados:", membros, default=def_int, key=f"sel_{boss_name}_{item}")
 
-                    if interessados_agora:
-                        # Prioridades e Sorteio (Apenas visual, não salva na planilha)
-                        c_prio = st.columns(len(interessados_agora))
-                        for idx, pl in enumerate(interessados_agora):
-                            with c_prio[idx]:
-                                st.selectbox(f"Prio {pl}", [1,2,3,4,5], key=f"p_{boss_name}_{item}_{pl}")
+                    if int_agora:
+                        c_prio = st.columns(len(int_agora))
+                        for idx, pl in enumerate(int_agora):
+                            with c_prio[idx]: st.selectbox(f"Prio {pl}", [1,2,3,4,5], key=f"p_{boss_name}_{item}_{pl}")
                         
                         if st.button(f"🎲 Sortear", key=f"roll_{boss_name}_{item}"):
-                            st.session_state[f"res_{boss_name}_{item}"] = {p: random.randint(1, 100) for p in interessados_agora}
+                            st.session_state[f"res_{boss_name}_{item}"] = {p: random.randint(1, 100) for p in int_agora}
                         
                         res_key = f"res_{boss_name}_{item}"
                         if res_key in st.session_state and isinstance(st.session_state[res_key], dict):
                             st.code(" | ".join([f"{k}: {v}" for k, v in st.session_state[res_key].items()]))
                         
-                        venc = st.selectbox("Quem levou o drop?", interessados_agora, key=f"v_{boss_name}_{item}")
-                        
-                        if st.button(f"✅ Registrar Drop Definitivo", key=f"reg_{boss_name}_{item}", use_container_width=True):
-                            # 1. Salva no Histórico de Equipamentos
-                            novo_h = pd.DataFrame([{"Data": datetime.now().strftime("%d/%m %H:%M"), "Boss": boss_name, "Item": item, "Ganhador": venc}])
-                            df_up_h = pd.concat([df_equipamentos, novo_h], ignore_index=True) if not df_equipamentos.empty else novo_h
+                        venc = st.selectbox("Quem levou?", int_agora, key=f"v_{boss_name}_{item}")
+                        if st.button(f"✅ Registrar Drop", key=f"reg_{boss_name}_{item}"):
+                            n_h = pd.DataFrame([{"Data": datetime.now().strftime("%d/%m %H:%M"), "Boss": boss_name, "Item": item, "Ganhador": venc}])
+                            df_up_h = pd.concat([df_equipamentos, n_h], ignore_index=True) if not df_equipamentos.empty else n_h
                             conn.update(spreadsheet=URL_PLANILHA, worksheet="Equipamentos", data=df_up_h)
                             
-                            # 2. Remove o ganhador da Wishlist e atualiza o Banco Inteiro
-                            # Para manter a integridade, reconstruímos a lista de interesses sem o ganhador
-                            restantes_db = df_interesses_db[~((df_interesses_db["Item"] == key_item) & (df_interesses_db["Membro"] == venc))]
-                            conn.update(spreadsheet=URL_PLANILHA, worksheet="Interesses", data=restantes_db)
-                            
-                            st.success(f"Drop registrado! {venc} removido da Wishlist.")
-                            time.sleep(1)
+                            rest = df_interesses_db[~((df_interesses_db["Item"] == key_item) & (df_interesses_db["Membro"] == venc))]
+                            conn.update(spreadsheet=URL_PLANILHA, worksheet="Interesses", data=rest)
                             st.rerun()
                     st.divider()
-
-    if not df_equipamentos.empty:
-        st.subheader("📜 Histórico de Itens Entregues")
-        st.dataframe(df_equipamentos, use_container_width=True, hide_index=True)
 
 # ------------------------------------------
 # ABA 2: CAIXA
@@ -220,22 +294,160 @@ with aba2:
         with cx1: b_v = st.selectbox("Boss", lista_bosses, key="bv")
         with cx2: i_v = st.selectbox("Item", mini_bosses[b_v]["drops"], key="iv")
         pt = st.multiselect("Quem estava?", membros, key="ptv")
-        
         if st.button("💾 Salvar no Caixa"):
             if pt:
-                novo_c = pd.DataFrame([{"Data": datetime.now().strftime("%d/%m/%Y %H:%M"), "Boss": b_v, "Item": i_v, "Presentes": ", ".join(pt), "Partes": len(pt), "Status": "Aguardando Venda", "Detalhes/Valor": ""}])
-                up_c = pd.concat([df_tesouraria, novo_c], ignore_index=True) if not df_tesouraria.empty else novo_c
-                conn.update(spreadsheet=URL_PLANILHA, worksheet="Tesouraria", data=up_c)
+                n_c = pd.DataFrame([{"Data": datetime.now().strftime("%d/%m/%Y %H:%M"), "Boss": b_v, "Item": i_v, "Presentes": ", ".join(pt), "Partes": len(pt), "Status": "Aguardando Venda", "Detalhes/Valor": ""}])
+                conn.update(spreadsheet=URL_PLANILHA, worksheet="Tesouraria", data=pd.concat([df_tesouraria, n_c], ignore_index=True) if not df_tesouraria.empty else n_c)
                 st.rerun()
-
     if not df_tesouraria.empty:
         editado = st.data_editor(df_tesouraria, use_container_width=True, hide_index=True, num_rows="dynamic",
-            column_config={
-                "Status": st.column_config.SelectboxColumn("Status", options=["Aguardando Venda", "Vendido", "Ficou com a PT"]),
-                "Detalhes/Valor": st.column_config.TextColumn("Valor/Detalhes")
-            },
+            column_config={"Status": st.column_config.SelectboxColumn("Status", options=["Aguardando Venda", "Vendido", "Ficou com a PT"])},
             disabled=["Data", "Boss", "Item", "Presentes", "Partes"], key="ed_tes"
         )
         if st.button("☁️ Sincronizar Alterações"):
             conn.update(spreadsheet=URL_PLANILHA, worksheet="Tesouraria", data=editado)
             st.rerun()
+
+# ------------------------------------------
+# ABA 3: MATRIZ DE RESPAWN COM FOTOS
+# ------------------------------------------
+with aba3:
+    if not cronograma_por_hora:
+        st.error("❌ Não encontrei dados de cruzamento na planilha de horários.")
+    else:
+        agora_utc = datetime.utcnow()
+        agora_br = agora_utc - timedelta(hours=3)
+        agora_sv = agora_br + timedelta(hours=3)
+        
+        c_fuso, c_hora = st.columns([1, 1])
+        fuso = c_fuso.radio("⌚ Fuso Horário Base:", ["Horário do Jogo (Servidor)", "Horário do Brasil (-3h)"], horizontal=True)
+        is_br = (fuso == "Horário do Brasil (-3h)")
+        
+        hora_atual_exibicao = agora_br if is_br else agora_sv
+        
+        col_txt, col_btn = c_hora.columns([3, 1])
+        col_txt.info(f"🕒 **Hora Atual:** {hora_atual_exibicao.strftime('%H:%M')}")
+        if col_btn.button("🔄 Atualizar Relógio", use_container_width=True):
+            st.rerun()
+
+        # AJUSTA FUSO HORÁRIO
+        cronograma_ajustado = {}
+        for h_sv, bosses in cronograma_por_hora.items():
+            if is_br:
+                h_obj = datetime.strptime(h_sv, "%H:%M") - timedelta(hours=3)
+                h_ajustado = h_obj.strftime("%H:%M")
+            else:
+                h_ajustado = h_sv
+            cronograma_ajustado[h_ajustado] = bosses
+
+        # CÁLCULO DA COR
+        agora_mins = hora_atual_exibicao.hour * 60 + hora_atual_exibicao.minute
+        status_map = {}
+        futuros = {}
+        
+        for h in cronograma_ajustado.keys():
+            h_obj = datetime.strptime(h, "%H:%M")
+            h_mins = h_obj.hour * 60 + h_obj.minute
+            diff = h_mins - agora_mins
+            
+            if diff < -720: diff += 1440
+            elif diff > 720: diff -= 1440
+            
+            if -30 <= diff <= 0:
+                status_map[h] = "status-vivo"
+            elif diff > 0:
+                futuros[h] = diff
+                status_map[h] = "status-morto"
+            else:
+                status_map[h] = "status-morto"
+        
+        if futuros:
+            proximo_h = min(futuros, key=futuros.get)
+            status_map[proximo_h] = "status-breve"
+
+        st.divider()
+
+        f1, f2 = st.columns(2)
+        modo_visao = f1.selectbox("👁️ Modo de Visualização:", ["Tabela Completa (Por Horário)", "Inverter: Filtrar por Boss"])
+        
+        todas_horas = sorted(list(cronograma_ajustado.keys()))
+        todos_bosses = sorted(list(cronograma_por_boss.keys()))
+        
+        def get_boss_img(b_name):
+            if b_name in mini_bosses:
+                return f"<img src='{mini_bosses[b_name]['foto_boss']}' class='icon-table' onerror=\"this.src='https://via.placeholder.com/24'\">"
+            return ""
+
+        # ===============================================
+        # MODO 1: POR HORÁRIO
+        # ===============================================
+        if modo_visao == "Tabela Completa (Por Horário)":
+            hora_filtro = f2.selectbox("🔍 Pular para Horário (Opcional):", ["Todos"] + todas_horas)
+            
+            html_matriz = "<table class='matrix-table'><tr><th>Horário</th><th>Boss 1</th><th>Boss 2</th><th>Boss 3</th><th>Boss 4</th></tr>"
+            
+            for h in todas_horas:
+                if hora_filtro != "Todos" and h != hora_filtro: continue
+                
+                bosses = sorted(list(cronograma_ajustado[h]))
+                while len(bosses) < 4: bosses.append("-")
+                
+                status_classe = status_map.get(h, "status-morto")
+                html_matriz += f"<tr class='{status_classe}'><td class='cell-time'>{h}</td>"
+                for b in bosses[:4]:
+                    if b == "-":
+                        html_matriz += f"<td>-</td>"
+                    else:
+                        img_tag = get_boss_img(b)
+                        # A div com align-items: center força a foto e o texto a ficarem bem alinhados
+                        html_matriz += f"<td><div style='display: flex; justify-content: center; align-items: center;'>{img_tag}{b}</div></td>"
+                html_matriz += "</tr>"
+            
+            html_matriz += "</table>"
+            st.markdown(html_matriz, unsafe_allow_html=True)
+            st.caption("🟢 **VIVO:** Nasceu a menos de 30 minutos | 🟡 **PRÓXIMO:** É o próximo da fila")
+
+        # ===============================================
+        # MODO 2: POR BOSS
+        # ===============================================
+        else:
+            boss_filtro = f2.selectbox("🔍 Selecione o Boss:", todos_bosses)
+            
+            horas_deste_boss = []
+            for h_ajustado, lista_b in cronograma_ajustado.items():
+                if boss_filtro in lista_b: horas_deste_boss.append(h_ajustado)
+            
+            horas_deste_boss = sorted(horas_deste_boss)
+            
+            def separar_em_grupos(lista, tamanho):
+                return [lista[i:i + tamanho] for i in range(0, len(lista), tamanho)]
+            
+            blocos_de_horas = separar_em_grupos(horas_deste_boss, 4)
+            html_matriz = "<table class='matrix-table'>"
+            
+            for i, bloco in enumerate(blocos_de_horas):
+                html_matriz += "<tr>"
+                
+                if i == 0:
+                    img_grande = ""
+                    if boss_filtro in mini_bosses:
+                        img_grande = f"<img src='{mini_bosses[boss_filtro]['foto_boss']}' class='icon-large' onerror=\"this.src='https://via.placeholder.com/48'\"><br>"
+                    html_matriz += f"<td rowspan='{len(blocos_de_horas)}' class='cell-boss-title'>{img_grande}{boss_filtro}</td>"
+                
+                for h in bloco:
+                    status = status_map.get(h, "status-morto")
+                    if status == "status-vivo":
+                        html_matriz += f"<td class='cell-time-vivo'>{h}<br><small>(VIVO)</small></td>"
+                    elif status == "status-breve":
+                        html_matriz += f"<td class='cell-time-breve'>{h}<br><small>(PRÓX)</small></td>"
+                    else:
+                        html_matriz += f"<td class='cell-time-morto'>{h}</td>"
+                
+                for _ in range(4 - len(bloco)):
+                    html_matriz += "<td class='cell-time-morto'>-</td>"
+                    
+                html_matriz += "</tr>"
+                
+            html_matriz += "</table>"
+            st.markdown(html_matriz, unsafe_allow_html=True)
+            st.caption("🟢 **VIVO:** Nasceu a menos de 30 minutos | 🟡 **PRÓXIMO:** É o próximo da fila")
