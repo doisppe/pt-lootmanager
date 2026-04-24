@@ -6,13 +6,6 @@ from datetime import datetime, timedelta
 import time
 import re
 
-# Tenta importar o autorefresh (precisa estar no requirements.txt)
-try:
-    from streamlit_autorefresh import st_autorefresh
-    has_autorefresh = True
-except ImportError:
-    has_autorefresh = False
-
 st.set_page_config(page_title="Loot Manager PT", layout="wide")
 
 # ==========================================
@@ -76,12 +69,13 @@ mini_bosses = {
     "Necromancer": {"foto_boss": "https://static.divine-pride.net/images/mobs/png/1870.png", "drops": ["Necro Hood", "Lich's Bone Wand", "Orlean's Gloves", "Carta Necromancer"]},
     "Silver Thief Bug": {"foto_boss": "https://i.imgur.com/hMW8tGF.png", "drops": ["Navel Ring", "Mask of Bankrupt", "Carta Silver Thief Bug"]},
     "Taffy": {"foto_boss": "https://static.divine-pride.net/images/mobs/png/3443.png", "drops": ["Horn Protector", "Spike", "Carta Taffy"]},
-    "Tattler Sisters": {"foto_boss": "https://static.divine-pride.net/images/mobs/png/20366.png", "drops": ["Dark Blinkers", "Poison Knife", "Carta Tattler Sisters"]},
+    "Tattler Sister": {"foto_boss": "https://static.divine-pride.net/images/mobs/png/20366.png", "drops": ["Dark Blinkers", "Poison Knife", "Carta Tattler Sisters"]},
     "Toad": {"foto_boss": "https://static.divine-pride.net/images/mobs/png/1089.png", "drops": ["Capa do Toad", "Frog Hat", "Carta Toad"]},
     "Vagabond Wolf": {"foto_boss": "https://static.divine-pride.net/images/mobs/png/21326.png", "drops": ["Drooping Baby Wolf", "Wolf Fur Coat", "Carta Vagabond Wolf"]},
     "Vocal": {"foto_boss": "https://static.divine-pride.net/images/mobs/png/21327.png", "drops": ["Quaver", "Sound Amplifier", "Carta Vocal"]},
     "Vodyanoy": {"foto_boss": "https://i.imgur.com/iyTuoCm.png", "drops": ["Magic Stone Ring", "Skin of Lindwyrmm", "Carta Vodyanoy"]},
     "Zealotus": {"foto_boss": "https://static.divine-pride.net/images/mobs/png/1200.png", "drops": ["Zealotus Doll", "Handcuffs", "Carta Zealotus"]},
+    
     "Ancestral Warden": {
         "foto_boss": "https://static.divine-pride.net/images/mobs/png/20277.png", 
         "drops": ["Shoulder Protector", "Woodbone Shield", "Ancestral Warden card"]
@@ -140,7 +134,6 @@ cronograma_por_boss = {}
 
 if not df_horarios_bruto.empty:
     colunas = df_horarios_bruto.columns.tolist()
-    
     for idx, row in df_horarios_bruto.iterrows():
         val_primeira_col = str(row.iloc[0]).strip()
         match_hora = re.search(r'(\d{1,2}:\d{2})', val_primeira_col)
@@ -312,154 +305,159 @@ with aba2:
             st.rerun()
 
 # ------------------------------------------
-# ABA 3: MATRIZ DE RESPAWN E AUTO-REFRESH
+# ABA 3: MATRIZ DE RESPAWN COM FRAGMENTO DE AUTO-REFRESH
 # ------------------------------------------
-with aba3:
+# O @st.fragment diz ao Streamlit para atualizar APENAS esta função sem piscar o resto do site!
+@st.fragment(run_every=5)
+def renderizar_cronograma():
     if not cronograma_por_hora:
         st.error("❌ Não encontrei dados de cruzamento na planilha de horários.")
-    else:
-        agora_utc = datetime.utcnow()
-        agora_br = agora_utc - timedelta(hours=3)
-        agora_sv = agora_br + timedelta(hours=3)
-        
-        c_fuso, c_hora, c_auto = st.columns([1.2, 1.3, 1])
-        fuso = c_fuso.radio("⌚ Fuso Horário Base:", ["Horário do Jogo (Servidor)", "Horário do Brasil (-3h)"], horizontal=True)
-        is_br = (fuso == "Horário do Brasil (-3h)")
-        
-        hora_atual_exibicao = agora_br if is_br else agora_sv
-        
-        c_hora.info(f"🕒 **Hora Atual:** {hora_atual_exibicao.strftime('%H:%M')} (Ficam verdes por 1 hora)")
-        
-        # SISTEMA DE AUTO-REFRESH E BOTÃO MANUAL
-        auto_update = c_auto.checkbox("⏱️ Ligar Auto-Refresh (5s)", help="Ative para ver os bosses mudando de cor ao vivo. Desative se for preencher a Wishlist.")
-        
-        if auto_update:
-            if has_autorefresh:
-                st_autorefresh(interval=5000, limit=None, key="matriz_refresh")
-            else:
-                st.error("Aviso: Instale 'pip install streamlit-autorefresh' no terminal para habilitar essa função.")
-        
-        if c_auto.button("🔄 Atualizar Manualmente", use_container_width=True):
-            st.rerun()
+        return
 
-        # AJUSTA FUSO HORÁRIO
-        cronograma_ajustado = {}
-        for h_sv, bosses in cronograma_por_hora.items():
-            if is_br:
-                h_obj = datetime.strptime(h_sv, "%H:%M") - timedelta(hours=3)
-                h_ajustado = h_obj.strftime("%H:%M")
-            else:
-                h_ajustado = h_sv
-            cronograma_ajustado[h_ajustado] = bosses
+    agora_utc = datetime.utcnow()
+    agora_br = agora_utc - timedelta(hours=3)
+    agora_sv = agora_br + timedelta(hours=3)
+    
+    c_fuso, c_hora = st.columns([1, 1])
+    fuso = c_fuso.radio("⌚ Fuso Horário Base:", ["Horário do Jogo (Servidor)", "Horário do Brasil (-3h)"], horizontal=True, key="fuso_radio")
+    is_br = (fuso == "Horário do Brasil (-3h)")
+    
+    hora_atual_exibicao = agora_br if is_br else agora_sv
+    agora_mins = hora_atual_exibicao.hour * 60 + hora_atual_exibicao.minute
+    
+    c_hora.info(f"🕒 **Hora Atual:** {hora_atual_exibicao.strftime('%H:%M')} (Ficam verdes por 1 hora)")
 
-        # CÁLCULO DA COR - 1 HORA DE VIDA (60 MINUTOS)
-        agora_mins = hora_atual_exibicao.hour * 60 + hora_atual_exibicao.minute
-        status_map = {}
-        futuros = {}
-        
-        for h in cronograma_ajustado.keys():
-            h_obj = datetime.strptime(h, "%H:%M")
-            h_mins = h_obj.hour * 60 + h_obj.minute
-            diff = h_mins - agora_mins
-            
-            if diff < -720: diff += 1440
-            elif diff > 720: diff -= 1440
-            
-            # ALTERADO PARA 60 MINUTOS DE VIDA (ANTES ERA 30)
-            if -60 <= diff <= 0:
-                status_map[h] = "status-vivo"
-            elif diff > 0:
-                futuros[h] = diff
-                status_map[h] = "status-morto"
-            else:
-                status_map[h] = "status-morto"
-        
-        if futuros:
-            proximo_h = min(futuros, key=futuros.get)
-            status_map[proximo_h] = "status-breve"
-
-        st.divider()
-
-        f1, f2 = st.columns(2)
-        modo_visao = f1.selectbox("👁️ Modo de Visualização:", ["Tabela Completa (Por Horário)", "Inverter: Filtrar por Boss"])
-        
-        todas_horas = sorted(list(cronograma_ajustado.keys()))
-        todos_bosses = sorted(list(cronograma_por_boss.keys()))
-        
-        def get_boss_img(b_name):
-            if b_name in mini_bosses:
-                return f"<img src='{mini_bosses[b_name]['foto_boss']}' class='icon-table' onerror=\"this.src='https://via.placeholder.com/24'\">"
-            return ""
-
-        # ===============================================
-        # MODO 1: POR HORÁRIO
-        # ===============================================
-        if modo_visao == "Tabela Completa (Por Horário)":
-            hora_filtro = f2.selectbox("🔍 Pular para Horário (Opcional):", ["Todos"] + todas_horas)
-            
-            html_matriz = "<table class='matrix-table'><tr><th>Horário</th><th>Boss 1</th><th>Boss 2</th><th>Boss 3</th><th>Boss 4</th></tr>"
-            
-            for h in todas_horas:
-                if hora_filtro != "Todos" and h != hora_filtro: continue
-                
-                bosses = sorted(list(cronograma_ajustado[h]))
-                while len(bosses) < 4: bosses.append("-")
-                
-                status_classe = status_map.get(h, "status-morto")
-                html_matriz += f"<tr class='{status_classe}'><td class='cell-time' style='text-align: center;'>{h}</td>"
-                for b in bosses[:4]:
-                    if b == "-":
-                        html_matriz += f"<td style='text-align: center;'>-</td>"
-                    else:
-                        img_tag = get_boss_img(b)
-                        html_matriz += f"<td><div style='display: flex; justify-content: center; align-items: center;'>{img_tag}{b}</div></td>"
-                html_matriz += "</tr>"
-            
-            html_matriz += "</table>"
-            st.markdown(html_matriz, unsafe_allow_html=True)
-            st.caption("🟢 **VIVO:** Nasceu a menos de 1 hora | 🟡 **PRÓXIMO:** É o próximo da fila")
-
-        # ===============================================
-        # MODO 2: POR BOSS
-        # ===============================================
+    # AJUSTA FUSO HORÁRIO
+    cronograma_ajustado = {}
+    for h_sv, bosses in cronograma_por_hora.items():
+        if is_br:
+            h_obj = datetime.strptime(h_sv, "%H:%M") - timedelta(hours=3)
+            h_ajustado = h_obj.strftime("%H:%M")
         else:
-            boss_filtro = f2.selectbox("🔍 Selecione o Boss:", todos_bosses)
+            h_ajustado = h_sv
+        cronograma_ajustado[h_ajustado] = bosses
+
+    # LÓGICA DE ORDENAÇÃO CIRCULAR (A MÁGICA DA FILA)
+    def sort_circular(h_str):
+        h_obj = datetime.strptime(h_str, "%H:%M")
+        h_mins = h_obj.hour * 60 + h_obj.minute
+        diff = h_mins - agora_mins
+        
+        if diff < -720: diff += 1440
+        elif diff > 720: diff -= 1440
+        
+        # Se diff é >= -60, ele é Vivo (0 a -60) ou Futuro (> 0). Ficam no topo.
+        # Se diff < -60, ele é Passado Morto. Vão pro final.
+        if diff >= -60:
+            return diff
+        else:
+            return diff + 1440
+
+    # CÁLCULO DA COR - 1 HORA DE VIDA (60 MINUTOS)
+    status_map = {}
+    futuros = {}
+    
+    for h in cronograma_ajustado.keys():
+        h_obj = datetime.strptime(h, "%H:%M")
+        h_mins = h_obj.hour * 60 + h_obj.minute
+        diff = h_mins - agora_mins
+        
+        if diff < -720: diff += 1440
+        elif diff > 720: diff -= 1440
+        
+        if -60 <= diff <= 0:
+            status_map[h] = "status-vivo"
+        elif diff > 0:
+            futuros[h] = diff
+            status_map[h] = "status-morto"
+        else:
+            status_map[h] = "status-morto"
+    
+    if futuros:
+        proximo_h = min(futuros, key=futuros.get)
+        status_map[proximo_h] = "status-breve"
+
+    st.divider()
+
+    f1, f2 = st.columns(2)
+    modo_visao = f1.selectbox("👁️ Modo de Visualização:", ["Tabela Completa (Por Horário)", "Inverter: Filtrar por Boss"], key="modo_visao")
+    
+    # APLICANDO A ORDENAÇÃO CIRCULAR AQUI
+    todas_horas = sorted(list(cronograma_ajustado.keys()), key=sort_circular)
+    todos_bosses = sorted(list(cronograma_por_boss.keys()))
+    
+    def get_boss_img(b_name):
+        if b_name in mini_bosses:
+            return f"<img src='{mini_bosses[b_name]['foto_boss']}' class='icon-table' onerror=\"this.src='https://via.placeholder.com/24'\">"
+        return ""
+
+    if modo_visao == "Tabela Completa (Por Horário)":
+        hora_filtro = f2.selectbox("🔍 Pular para Horário (Opcional):", ["Todos"] + sorted(list(cronograma_ajustado.keys())), key="hora_filtro")
+        
+        html_matriz = "<table class='matrix-table'><tr><th>Horário</th><th>Boss 1</th><th>Boss 2</th><th>Boss 3</th><th>Boss 4</th></tr>"
+        
+        for h in todas_horas:
+            if hora_filtro != "Todos" and h != hora_filtro: continue
             
-            horas_deste_boss = []
-            for h_ajustado, lista_b in cronograma_ajustado.items():
-                if boss_filtro in lista_b: horas_deste_boss.append(h_ajustado)
+            bosses = sorted(list(cronograma_ajustado[h]))
+            while len(bosses) < 4: bosses.append("-")
             
-            horas_deste_boss = sorted(horas_deste_boss)
+            status_classe = status_map.get(h, "status-morto")
+            html_matriz += f"<tr class='{status_classe}'><td class='cell-time' style='text-align: center;'>{h}</td>"
+            for b in bosses[:4]:
+                if b == "-":
+                    html_matriz += f"<td style='text-align: center;'>-</td>"
+                else:
+                    img_tag = get_boss_img(b)
+                    html_matriz += f"<td><div style='display: flex; justify-content: center; align-items: center;'>{img_tag}{b}</div></td>"
+            html_matriz += "</tr>"
+        
+        html_matriz += "</table>"
+        st.markdown(html_matriz, unsafe_allow_html=True)
+        st.caption("🟢 **VIVO:** Nasceu a menos de 1 hora | 🟡 **PRÓXIMO:** É o próximo da fila")
+
+    else:
+        boss_filtro = f2.selectbox("🔍 Selecione o Boss:", todos_bosses, key="boss_filtro")
+        
+        horas_deste_boss = []
+        for h_ajustado, lista_b in cronograma_ajustado.items():
+            if boss_filtro in lista_b: horas_deste_boss.append(h_ajustado)
+        
+        # ORDENA AS HORAS DO BOSS DE FORMA CIRCULAR TAMBÉM
+        horas_deste_boss = sorted(horas_deste_boss, key=sort_circular)
+        
+        def separar_em_grupos(lista, tamanho):
+            return [lista[i:i + tamanho] for i in range(0, len(lista), tamanho)]
+        
+        blocos_de_horas = separar_em_grupos(horas_deste_boss, 4)
+        html_matriz = "<table class='matrix-table'>"
+        
+        for i, bloco in enumerate(blocos_de_horas):
+            html_matriz += "<tr>"
             
-            def separar_em_grupos(lista, tamanho):
-                return [lista[i:i + tamanho] for i in range(0, len(lista), tamanho)]
+            if i == 0:
+                img_grande = ""
+                if boss_filtro in mini_bosses:
+                    img_grande = f"<img src='{mini_bosses[boss_filtro]['foto_boss']}' class='icon-large' onerror=\"this.src='https://via.placeholder.com/48'\"><br>"
+                html_matriz += f"<td rowspan='{len(blocos_de_horas)}' class='cell-boss-title'>{img_grande}{boss_filtro}</td>"
             
-            blocos_de_horas = separar_em_grupos(horas_deste_boss, 4)
-            html_matriz = "<table class='matrix-table'>"
+            for h in bloco:
+                status = status_map.get(h, "status-morto")
+                if status == "status-vivo":
+                    html_matriz += f"<td class='cell-time-vivo'>{h}<br><small>(VIVO)</small></td>"
+                elif status == "status-breve":
+                    html_matriz += f"<td class='cell-time-breve'>{h}<br><small>(PRÓX)</small></td>"
+                else:
+                    html_matriz += f"<td class='cell-time-morto'>{h}</td>"
             
-            for i, bloco in enumerate(blocos_de_horas):
-                html_matriz += "<tr>"
+            for _ in range(4 - len(bloco)):
+                html_matriz += "<td class='cell-time-morto'>-</td>"
                 
-                if i == 0:
-                    img_grande = ""
-                    if boss_filtro in mini_bosses:
-                        img_grande = f"<img src='{mini_bosses[boss_filtro]['foto_boss']}' class='icon-large' onerror=\"this.src='https://via.placeholder.com/48'\"><br>"
-                    html_matriz += f"<td rowspan='{len(blocos_de_horas)}' class='cell-boss-title'>{img_grande}{boss_filtro}</td>"
-                
-                for h in bloco:
-                    status = status_map.get(h, "status-morto")
-                    if status == "status-vivo":
-                        html_matriz += f"<td class='cell-time-vivo'>{h}<br><small>(VIVO)</small></td>"
-                    elif status == "status-breve":
-                        html_matriz += f"<td class='cell-time-breve'>{h}<br><small>(PRÓX)</small></td>"
-                    else:
-                        html_matriz += f"<td class='cell-time-morto'>{h}</td>"
-                
-                for _ in range(4 - len(bloco)):
-                    html_matriz += "<td class='cell-time-morto'>-</td>"
-                    
-                html_matriz += "</tr>"
-                
-            html_matriz += "</table>"
-            st.markdown(html_matriz, unsafe_allow_html=True)
-            st.caption("🟢 **VIVO:** Nasceu a menos de 1 hora | 🟡 **PRÓXIMO:** É o próximo da fila")
+            html_matriz += "</tr>"
+            
+        html_matriz += "</table>"
+        st.markdown(html_matriz, unsafe_allow_html=True)
+        st.caption("🟢 **VIVO:** Nasceu a menos de 1 hora | 🟡 **PRÓXIMO:** É o próximo da fila")
+
+with aba3:
+    renderizar_cronograma()
