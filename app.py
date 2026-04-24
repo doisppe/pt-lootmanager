@@ -6,6 +6,13 @@ from datetime import datetime, timedelta
 import time
 import re
 
+# Tenta importar o autorefresh (precisa estar no requirements.txt)
+try:
+    from streamlit_autorefresh import st_autorefresh
+    has_autorefresh = True
+except ImportError:
+    has_autorefresh = False
+
 st.set_page_config(page_title="Loot Manager PT", layout="wide")
 
 # ==========================================
@@ -107,17 +114,14 @@ mini_bosses = {
         "foto_boss": "https://static.divine-pride.net/images/mobs/png/1022.png", 
         "drops": ["Ulle's Cap", "Beast Bone Bow", "Werewolf Card"]
     },
-
     "Shiosen": {
         "foto_boss": "https://static.divine-pride.net/images/mobs/png/2254.png", 
         "drops": ["Shiled de Água", "Ethernal Harmony", "Shiosen Scroll", "Shiosen Card"]
     },
-
     "Sludge Abomination": {
         "foto_boss": "https://static.divine-pride.net/images/mobs/png/1366.png", 
         "drops": ["Chemical Amalgam", "Chemistry Kit", "Sludge Abomination card"]
     },
-
     "Rotbloom": {
         "foto_boss": "https://static.divine-pride.net/images/mobs/png/2906.png", 
         "drops": ["Apothecary Robe", "Addiction Plant", "Rotbloom card"]
@@ -125,9 +129,8 @@ mini_bosses = {
     "Possessed Marble Idol": {
         "foto_boss": "https://www.spriters-resource.com/media/asset_icons/21/23101.png", 
         "drops": ["Marble Pillar", "Marble Mask", "Possessed Marble Idol card"]
-    },
+    }
 }
-
 
 # ==========================================
 # 2.5 O EXTRATOR EM MATRIZ 
@@ -309,7 +312,7 @@ with aba2:
             st.rerun()
 
 # ------------------------------------------
-# ABA 3: MATRIZ DE RESPAWN COM FOTOS
+# ABA 3: MATRIZ DE RESPAWN E AUTO-REFRESH
 # ------------------------------------------
 with aba3:
     if not cronograma_por_hora:
@@ -319,15 +322,24 @@ with aba3:
         agora_br = agora_utc - timedelta(hours=3)
         agora_sv = agora_br + timedelta(hours=3)
         
-        c_fuso, c_hora = st.columns([1, 1])
+        c_fuso, c_hora, c_auto = st.columns([1.2, 1.3, 1])
         fuso = c_fuso.radio("⌚ Fuso Horário Base:", ["Horário do Jogo (Servidor)", "Horário do Brasil (-3h)"], horizontal=True)
         is_br = (fuso == "Horário do Brasil (-3h)")
         
         hora_atual_exibicao = agora_br if is_br else agora_sv
         
-        col_txt, col_btn = c_hora.columns([3, 1])
-        col_txt.info(f"🕒 **Hora Atual:** {hora_atual_exibicao.strftime('%H:%M')}")
-        if col_btn.button("🔄 Atualizar Relógio", use_container_width=True):
+        c_hora.info(f"🕒 **Hora Atual:** {hora_atual_exibicao.strftime('%H:%M')} (Ficam verdes por 1 hora)")
+        
+        # SISTEMA DE AUTO-REFRESH E BOTÃO MANUAL
+        auto_update = c_auto.checkbox("⏱️ Ligar Auto-Refresh (5s)", help="Ative para ver os bosses mudando de cor ao vivo. Desative se for preencher a Wishlist.")
+        
+        if auto_update:
+            if has_autorefresh:
+                st_autorefresh(interval=5000, limit=None, key="matriz_refresh")
+            else:
+                st.error("Aviso: Instale 'pip install streamlit-autorefresh' no terminal para habilitar essa função.")
+        
+        if c_auto.button("🔄 Atualizar Manualmente", use_container_width=True):
             st.rerun()
 
         # AJUSTA FUSO HORÁRIO
@@ -340,7 +352,7 @@ with aba3:
                 h_ajustado = h_sv
             cronograma_ajustado[h_ajustado] = bosses
 
-        # CÁLCULO DA COR
+        # CÁLCULO DA COR - 1 HORA DE VIDA (60 MINUTOS)
         agora_mins = hora_atual_exibicao.hour * 60 + hora_atual_exibicao.minute
         status_map = {}
         futuros = {}
@@ -353,7 +365,8 @@ with aba3:
             if diff < -720: diff += 1440
             elif diff > 720: diff -= 1440
             
-            if -30 <= diff <= 0:
+            # ALTERADO PARA 60 MINUTOS DE VIDA (ANTES ERA 30)
+            if -60 <= diff <= 0:
                 status_map[h] = "status-vivo"
             elif diff > 0:
                 futuros[h] = diff
@@ -393,19 +406,18 @@ with aba3:
                 while len(bosses) < 4: bosses.append("-")
                 
                 status_classe = status_map.get(h, "status-morto")
-                html_matriz += f"<tr class='{status_classe}'><td class='cell-time'>{h}</td>"
+                html_matriz += f"<tr class='{status_classe}'><td class='cell-time' style='text-align: center;'>{h}</td>"
                 for b in bosses[:4]:
                     if b == "-":
-                        html_matriz += f"<td>-</td>"
+                        html_matriz += f"<td style='text-align: center;'>-</td>"
                     else:
                         img_tag = get_boss_img(b)
-                        # A div com align-items: center força a foto e o texto a ficarem bem alinhados
                         html_matriz += f"<td><div style='display: flex; justify-content: center; align-items: center;'>{img_tag}{b}</div></td>"
                 html_matriz += "</tr>"
             
             html_matriz += "</table>"
             st.markdown(html_matriz, unsafe_allow_html=True)
-            st.caption("🟢 **VIVO:** Nasceu a menos de 30 minutos | 🟡 **PRÓXIMO:** É o próximo da fila")
+            st.caption("🟢 **VIVO:** Nasceu a menos de 1 hora | 🟡 **PRÓXIMO:** É o próximo da fila")
 
         # ===============================================
         # MODO 2: POR BOSS
@@ -450,4 +462,4 @@ with aba3:
                 
             html_matriz += "</table>"
             st.markdown(html_matriz, unsafe_allow_html=True)
-            st.caption("🟢 **VIVO:** Nasceu a menos de 30 minutos | 🟡 **PRÓXIMO:** É o próximo da fila")
+            st.caption("🟢 **VIVO:** Nasceu a menos de 1 hora | 🟡 **PRÓXIMO:** É o próximo da fila")
