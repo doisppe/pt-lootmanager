@@ -6,6 +6,13 @@ from datetime import datetime, timedelta
 import time
 import re
 
+# Tenta importar o autorefresh (precisa estar no requirements.txt)
+try:
+    from streamlit_autorefresh import st_autorefresh
+    has_autorefresh = True
+except ImportError:
+    has_autorefresh = False
+
 st.set_page_config(page_title="Loot Manager PT", layout="wide")
 
 # ==========================================
@@ -36,93 +43,93 @@ else:
     membros_salvos = "Isabela\nFelippe\nPlayer3"
 
 # ==========================================
-# 2. DICIONÁRIO DE BOSSES ORIGINAL
+# 2. DICIONÁRIO DE BOSSES ORIGINAL (COM ELEMENTO E RAÇA)
 # ==========================================
 mini_bosses = {
-    "Angeling": {"foto_boss": "https://static.divine-pride.net/images/mobs/png/1096.png", "drops": ["Cherubin Wing Shoulders", "Angeling Hat", "Carta Angeling"]},
-    "Anubis": {"foto_boss": "https://static.divine-pride.net/images/mobs/png/1098.png", "drops": ["Teleknesis Orb", "Anubis Helm", "Carta Anubis"]},
-    "Araccryo": {"foto_boss": "https://static.divine-pride.net/images/mobs/png/3088.png", "drops": ["Armadura de Gelo", "araccryo legs", "Carta Araccryo"]},
-    "Arc Angeling": {"foto_boss": "https://static.divine-pride.net/images/mobs/png/1388.png", "drops": ["Angelic Ring", "Orlean's Necklace", "Carta Arc Angeling"]},
-    "Baihu": {"foto_boss": "https://static.divine-pride.net/images/mobs/png/20347.png", "drops": ["Rabo de gato preto", "Durga", "Jaguar Hat", "Carta Baihu"]},
-    "Brain Sucker": {"foto_boss": "https://static.divine-pride.net/images/mobs/png/20889.png", "drops": ["Cursed Star", "Blood Sucker", "Carta Brain Sucker"]},
-    "Byrogue": {"foto_boss": "https://static.divine-pride.net/images/mobs/png/1839.png", "drops": ["Armadura de Fogo", "Assassin's Mask", "Carta Byrogue"]},
-    "Chepet": {"foto_boss": "https://static.divine-pride.net/images/mobs/png/1250.png", "drops": ["Pom band" , "Scarlet Ribbon", "Carta Chepet"]},
-    "Chimera": {"foto_boss": "https://static.divine-pride.net/images/mobs/png/1283.png", "drops": ["White Snake Ring" , "Chimera Mane", "Carta Chimera"]},
-    "Deviling": {"foto_boss": "https://static.divine-pride.net/images/mobs/png/1767.png", "drops": ["Deviling Hat","Devil Wing Shoulders", "Carta Deviling"]},
-    "Dragon Fly": {"foto_boss": "https://static.divine-pride.net/images/mobs/png/1091.png", "drops": ["Sitting Dragontail", "Flying Helmet", "Carta Dragon Fly"]},
-    "Eclipse": {"foto_boss": "https://static.divine-pride.net/images/mobs/png/3424.png", "drops": ["Carrot in mouth" , "Lunatic Brooch", "Carta Eclipse"]},
-    "Enraged Priest": {"foto_boss": "https://static.divine-pride.net/images/mobs/png/3514.png", "drops": ["Linen Gloves", "Pontiff's Cassock","Doom Slayer", "Carta Enraged Priest"]},
-    "Femmire": {"foto_boss": "https://i.imgur.com/ds86FSd.png", "drops": ["Capa de Água", "Swamp Crown", "Carta Femmire"]},
-    "Ghostring": {"foto_boss": "https://static.divine-pride.net/images/mobs/png/1120.png", "drops": ["Ghost Bandana","Librarian's Gloves", "Carta Ghostring"]},
-    "Goblin Leader": {"foto_boss": "https://static.divine-pride.net/images/mobs/png/1299.png", "drops": ["Goblin Leader's Mask", "Goblin Leader's Crown", "Carta Goblin Leader"]},
-    "Gryphon": {"foto_boss": "https://static.divine-pride.net/images/mobs/png/1259.png", "drops": ["Ahlspiess", "Falcon's Mask","Gryphon's Hat","Giant's Protection", "Carta Gryphon"]},
-    "Hydrolancer": {"foto_boss": "https://static.divine-pride.net/images/mobs/png/1720.png", "drops": ["Dragon's Temperance", "Elemental Ring", "Carta Hydrolancer"]},
-    "Iskralisa": {"foto_boss": "https://static.divine-pride.net/images/mobs/png/3173.png", "drops": ["Capa de Fogo", "Krathong Crown","Spiritual Ring", "Carta Iskralisa"]},
-    "Ju-On": {"foto_boss": "https://i.imgur.com/dbhgzBu.png", "drops": ["Ancient Grudge","Water Lily Crown", "Carta Ju-On"]},
-    "Kobold Leader": {"foto_boss": "https://static.divine-pride.net/images/mobs/png/1296.png", "drops": ["Capa de Vento", "Zweinhander","Rock Ruin Shield", "Carta Kobold Leader"]},
-    "Kublin": {"foto_boss": "https://static.divine-pride.net/images/mobs/png/1980.png", "drops": ["Armadura de Terra", "Goblin Mask","Mjolnir Mine Shoes", "Carta Kublin"]},
-    "Lockstep": {"foto_boss": "https://static.divine-pride.net/images/mobs/png/3126.png", "drops": ["Cooling Device", "Engine Pilebunker","Schimidt's Helm","Observer", "Carta Lockstep"]},
-    "Mastering": {"foto_boss": "https://static.divine-pride.net/images/mobs/png/21325.png", "drops": ["Poring Beret", "Mastering Card"]},
-    "Mayus": {"foto_boss": "https://static.divine-pride.net/images/mobs/png/1289.png", "drops": ["Capa de Terra", "Mayus Feeler", "Carta Mayus"]},
-    "Mime Monkey": {"foto_boss": "https://static.divine-pride.net/images/mobs/png/1585.png", "drops": ["Combo Gloves", "Fallen Monk Rosary", "Carta Mime Monkey"]},
-    "Morajin": {"foto_boss": "https://static.divine-pride.net/images/mobs/png/1993.png", "drops": ["Armadura de Vento", "Jupiter Spear","Piabinha", "Carta Morajin"]},
-    "Necromancer": {"foto_boss": "https://static.divine-pride.net/images/mobs/png/1870.png", "drops": ["Necro Hood", "Lich's Bone Wand", "Orlean's Gloves", "Carta Necromancer"]},
-    "Silver Thief Bug": {"foto_boss": "https://i.imgur.com/hMW8tGF.png", "drops": ["Navel Ring", "Mask of Bankrupt", "Carta Silver Thief Bug"]},
-    "Taffy": {"foto_boss": "https://static.divine-pride.net/images/mobs/png/3443.png", "drops": ["Horn Protector", "Spike", "Carta Taffy"]},
-    "Tattler Sisters": {"foto_boss": "https://static.divine-pride.net/images/mobs/png/20366.png", "drops": ["Dark Blinkers", "Poison Knife", "Carta Tattler Sisters"]},
-    "Toad": {"foto_boss": "https://static.divine-pride.net/images/mobs/png/1089.png", "drops": ["Capa do Toad", "Frog Hat", "Carta Toad"]},
-    "Vagabond Wolf": {"foto_boss": "https://static.divine-pride.net/images/mobs/png/21326.png", "drops": ["Drooping Baby Wolf", "Wolf Fur Coat", "Carta Vagabond Wolf"]},
-    "Vocal": {"foto_boss": "https://static.divine-pride.net/images/mobs/png/21327.png", "drops": ["Quaver", "Sound Amplifier", "Carta Vocal"]},
-    "Vodyanoy": {"foto_boss": "https://i.imgur.com/iyTuoCm.png", "drops": ["Magic Stone Ring", "Skin of Lindwyrmm", "Carta Vodyanoy"]},
-    "Zealotus": {"foto_boss": "https://static.divine-pride.net/images/mobs/png/1200.png", "drops": ["Zealotus Doll", "Handcuffs", "Carta Zealotus"]},
+    "Angeling": {"foto_boss": "https://static.divine-pride.net/images/mobs/png/1096.png", "drops": ["Cherubin Wing Shoulders", "Angeling Hat", "Carta Angeling"], "elemento": "✨ Sagrado", "raca": "👼 Anjo"},
+    "Anubis": {"foto_boss": "https://static.divine-pride.net/images/mobs/png/1098.png", "drops": ["Teleknesis Orb", "Anubis Helm", "Carta Anubis"], "elemento": "💀 Corrupt", "raca": "🧍 Humanoide"},
+    "Araccryo": {"foto_boss": "https://static.divine-pride.net/images/mobs/png/3088.png", "drops": ["Armadura de Gelo", "araccryo legs", "Carta Araccryo"], "elemento": "💧 Água", "raca": "🐛 Inseto"},
+    "Arc Angeling": {"foto_boss": "https://static.divine-pride.net/images/mobs/png/1388.png", "drops": ["Angelic Ring", "Orlean's Necklace", "Carta Arc Angeling"], "elemento": "✨ Sagrado", "raca": "👼 Anjo"},
+    "Baihu": {"foto_boss": "https://static.divine-pride.net/images/mobs/png/20347.png", "drops": ["Rabo de gato preto", "Durga", "Jaguar Hat", "Carta Baihu"], "elemento": "🌪️ Vento", "raca": "🧍 Humanoide"},
+    "Brain Sucker": {"foto_boss": "https://static.divine-pride.net/images/mobs/png/20889.png", "drops": ["Cursed Star", "Blood Sucker", "Carta Brain Sucker"], "elemento": "🌙 Sombrio", "raca": "🐛 Inseto"},
+    "Byrogue": {"foto_boss": "https://static.divine-pride.net/images/mobs/png/1839.png", "drops": ["Armadura de Fogo", "Assassin's Mask", "Carta Byrogue"], "elemento": "⚪ Neutro", "raca": "🧍 Humanoide"},
+    "Chepet": {"foto_boss": "https://static.divine-pride.net/images/mobs/png/1250.png", "drops": ["Pom band" , "Scarlet Ribbon", "Carta Chepet"], "elemento": "🔥 Fogo", "raca": "🧍 Humanoide"},
+    "Chimera": {"foto_boss": "https://static.divine-pride.net/images/mobs/png/1283.png", "drops": ["White Snake Ring" , "Chimera Mane", "Carta Chimera"], "elemento": "🔥 Fogo", "raca": "🐾 Bruto"},
+    "Deviling": {"foto_boss": "https://static.divine-pride.net/images/mobs/png/1767.png", "drops": ["Deviling Hat","Devil Wing Shoulders", "Carta Deviling"], "elemento": "🌙 Sombrio", "raca": "👿 Demônio"},
+    "Dragon Fly": {"foto_boss": "https://static.divine-pride.net/images/mobs/png/1091.png", "drops": ["Sitting Dragontail", "Flying Helmet", "Carta Dragon Fly"], "elemento": "🌪️ Vento", "raca": "🐛 Inseto"},
+    "Eclipse": {"foto_boss": "https://static.divine-pride.net/images/mobs/png/3424.png", "drops": ["Carrot in mouth" , "Lunatic Brooch", "Carta Eclipse"], "elemento": "⚪ Neutro", "raca": "🐾 Bruto"},
+    "Enraged Priest": {"foto_boss": "https://static.divine-pride.net/images/mobs/png/3514.png", "drops": ["Linen Gloves", "Pontiff's Cassock","Doom Slayer", "Carta Enraged Priest"], "elemento": "⚪ Neutro", "raca": "🧍 Humanoide"},
+    "Femmire": {"foto_boss": "https://i.imgur.com/ds86FSd.png", "drops": ["Capa de Água", "Swamp Crown", "Carta Femmire"], "elemento": "💧 Água", "raca": "🤖 Amorfo"},
+    "Ghostring": {"foto_boss": "https://static.divine-pride.net/images/mobs/png/1120.png", "drops": ["Ghost Bandana","Librarian's Gloves", "Carta Ghostring"], "elemento": "👻 Fantasma", "raca": "👿 Demônio"},
+    "Goblin Leader": {"foto_boss": "https://static.divine-pride.net/images/mobs/png/1299.png", "drops": ["Goblin Leader's Mask", "Goblin Leader's Crown", "Carta Goblin Leader"], "elemento": "🌪️ Vento", "raca": "🧍 Humanoide"},
+    "Gryphon": {"foto_boss": "https://static.divine-pride.net/images/mobs/png/1259.png", "drops": ["Ahlspiess", "Falcon's Mask","Gryphon's Hat","Giant's Protection", "Carta Gryphon"], "elemento": "🌪️ Vento", "raca": "🐾 Bruto"},
+    "Hydrolancer": {"foto_boss": "https://static.divine-pride.net/images/mobs/png/1720.png", "drops": ["Dragon's Temperance", "Elemental Ring", "Carta Hydrolancer"], "elemento": "🌙 Sombrio", "raca": "🐉 Dragão"},
+    "Iskralisa": {"foto_boss": "https://static.divine-pride.net/images/mobs/png/3173.png", "drops": ["Capa de Fogo", "Krathong Crown","Spiritual Ring", "Carta Iskralisa"], "elemento": "🔥 Fogo", "raca": "👿 Demônio"},
+    "Ju-On": {"foto_boss": "https://i.imgur.com/dbhgzBu.png", "drops": ["Ancient Grudge","Water Lily Crown", "Carta Ju-On"], "elemento": "🌙 Sombrio", "raca": "💀 Morto-Vivo"},
+    "Kobold Leader": {"foto_boss": "https://static.divine-pride.net/images/mobs/png/1296.png", "drops": ["Capa de Vento", "Zweinhander","Rock Ruin Shield", "Carta Kobold Leader"], "elemento": "🌪️ Vento", "raca": "🧍 Humanoide"},
+    "Kublin": {"foto_boss": "https://static.divine-pride.net/images/mobs/png/1980.png", "drops": ["Armadura de Terra", "Goblin Mask","Mjolnir Mine Shoes", "Carta Kublin"], "elemento": "🌿 Terra", "raca": "🧍 Humanoide"},
+    "Lockstep": {"foto_boss": "https://static.divine-pride.net/images/mobs/png/3126.png", "drops": ["Cooling Device", "Engine Pilebunker","Schimidt's Helm","Observer", "Carta Lockstep"], "elemento": "⚪ Neutro", "raca": "👿 Demônio"},
+    "Mastering": {"foto_boss": "https://static.divine-pride.net/images/mobs/png/21325.png", "drops": ["Poring Beret", "Mastering Card"], "elemento": "💧 Água", "raca": "🌱 Planta"},
+    "Mayus": {"foto_boss": "https://static.divine-pride.net/images/mobs/png/1289.png", "drops": ["Capa de Terra", "Mayus Feeler", "Carta Mayus"], "elemento": "🌿 Terra", "raca": "🐛 Inseto"},
+    "Mime Monkey": {"foto_boss": "https://static.divine-pride.net/images/mobs/png/1585.png", "drops": ["Combo Gloves", "Fallen Monk Rosary", "Carta Mime Monkey"], "elemento": "💧 Água", "raca": "🐾 Bruto"},
+    "Morajin": {"foto_boss": "https://static.divine-pride.net/images/mobs/png/1993.png", "drops": ["Armadura de Vento", "Jupiter Spear","Piabinha", "Carta Morajin"], "elemento": "🌪️ Vento", "raca": "🐟 Peixe"},
+    "Necromancer": {"foto_boss": "https://static.divine-pride.net/images/mobs/png/1870.png", "drops": ["Necro Hood", "Lich's Bone Wand", "Orlean's Gloves", "Carta Necromancer"], "elemento": "💀 Corrupt", "raca": "💀 Morto-Vivo"},
+    "Silver Thief Bug": {"foto_boss": "https://i.imgur.com/hMW8tGF.png", "drops": ["Navel Ring", "Mask of Bankrupt", "Carta Silver Thief Bug"], "elemento": "⚪ Neutro", "raca": "🐛 Inseto"},
+    "Taffy": {"foto_boss": "https://static.divine-pride.net/images/mobs/png/3443.png", "drops": ["Horn Protector", "Spike", "Carta Taffy"], "elemento": "🌿 Terra", "raca": "🐾 Bruto"},
+    "Tattler Sister": {"foto_boss": "https://static.divine-pride.net/images/mobs/png/20366.png", "drops": ["Dark Blinkers", "Poison Knife", "Carta Tattler Sister"], "elemento": "🌙 Sombrio", "raca": "🧍 Humanoide"},
+    "Toad": {"foto_boss": "https://static.divine-pride.net/images/mobs/png/1089.png", "drops": ["Capa do Toad", "Frog Hat", "Carta Toad"], "elemento": "💧 Água", "raca": "🐟 Peixe"},
+    "Vagabond Wolf": {"foto_boss": "https://static.divine-pride.net/images/mobs/png/21326.png", "drops": ["Drooping Baby Wolf", "Wolf Fur Coat", "Carta Vagabond Wolf"], "elemento": "🌿 Terra", "raca": "🐾 Bruto"},
+    "Vocal": {"foto_boss": "https://static.divine-pride.net/images/mobs/png/21327.png", "drops": ["Quaver", "Sound Amplifier", "Carta Vocal"], "elemento": "🌿 Terra", "raca": "🐛 Inseto"},
+    "Vodyanoy": {"foto_boss": "https://i.imgur.com/iyTuoCm.png", "drops": ["Magic Stone Ring", "Skin of Lindwyrmm", "Carta Vodyanoy"], "elemento": "💧 Água", "raca": "🐾 Bruto"},
+    "Zealotus": {"foto_boss": "https://static.divine-pride.net/images/mobs/png/1200.png", "drops": ["Zealotus Doll", "Handcuffs", "Carta Zealotus"], "elemento": "⚪ Neutro", "raca": "🧍 Humanoide"},
     
     "Ancestral Warden": {
         "foto_boss": "https://static.divine-pride.net/images/mobs/png/20277.png", 
-        "drops": ["Shoulder Protector", "Woodbone Shield", "Ancestral Warden card"]
+        "drops": ["Shoulder Protector", "Woodbone Shield", "Ancestral Warden card"], "elemento": "🔥 Fogo", "raca": "🧍 Humanoide"
     },
     "Blasphemous Ritual": {
         "foto_boss": "https://static.divine-pride.net/images/mobs/png/1957.png", 
-        "drops": ["Thornbush Hairband", "Doom Bible", "Blasphemous Ritual card"]
+        "drops": ["Thornbush Hairband", "Doom Bible", "Blasphemous Ritual card"], "elemento": "💀 Corrupt", "raca": "🌱 Planta"
     },
     "Blightwalker": {
         "foto_boss": "https://static.divine-pride.net/images/mobs/png/20420.png", 
-        "drops": ["Ronin's Kosode", "Corrupted Geta", "Blightwalker Card"]
+        "drops": ["Ronin's Kosode", "Corrupted Geta", "Blightwalker Card"], "elemento": "💀 Corrupt", "raca": "👿 Demônio"
     },
     "Bramblehare": {
         "foto_boss": "https://static.divine-pride.net/images/mobs/png/2336.png", 
-        "drops": ["Shield de Terra", "Jumping Manteau", "Bramblehare card"]
+        "drops": ["Shield de Terra", "Jumping Manteau", "Bramblehare card"], "elemento": "🌿 Terra", "raca": "🐾 Bruto"
     },
     "Tiki Kanaloa": {
         "foto_boss": "https://wikimirror.lifeto.co/asset.103.ggftw.net/wiki/to-w/images/6/68/Ancient_Hero_Statue.gif", 
-        "drops": ["Plastic Straw", "Tiki Talisman", "Tiki Kalanoa card"]
+        "drops": ["Plastic Straw", "Tiki Talisman", "Tiki Kalanoa card"], "elemento": "⚪ Neutro", "raca": "👿 Demônio"
     },
     "Twinjaw": {
         "foto_boss": "https://static.divine-pride.net/images/mobs/png/1618.png", 
-        "drops": ["Carapace Armor", "Twinjaw Axe", "Twinjaw card"]
+        "drops": ["Carapace Armor", "Twinjaw Axe", "Twinjaw card"], "elemento": "☠️ Veneno", "raca": "🐛 Inseto"
     },
     "Twisted Twilight": {
         "foto_boss": "https://static.divine-pride.net/images/mobs/png/1681.png", 
-        "drops": ["Dimensional Communicator", "Twilight Boots", "Twisted Twilight card"]
+        "drops": ["Dimensional Communicator", "Twilight Boots", "Twisted Twilight card"], "elemento": "👻 Fantasma", "raca": "🤖 Amorfo"
     },
     "Werewolf": {
         "foto_boss": "https://static.divine-pride.net/images/mobs/png/1022.png", 
-        "drops": ["Ulle's Cap", "Beast Bone Bow", "Werewolf Card"]
+        "drops": ["Ulle's Cap", "Beast Bone Bow", "Werewolf Card"], "elemento": "🌙 Sombrio", "raca": "🐾 Bruto"
     },
     "Shiosen": {
         "foto_boss": "https://static.divine-pride.net/images/mobs/png/2254.png", 
-        "drops": ["Shiled de Água", "Ethernal Harmony", "Shiosen Scroll", "Shiosen Card"]
+        "drops": ["Shiled de Água", "Ethernal Harmony", "Shiosen Scroll", "Shiosen Card"], "elemento": "💧 Água", "raca": "🧍 Humanoide"
     },
     "Sludge Abomination": {
         "foto_boss": "https://static.divine-pride.net/images/mobs/png/1366.png", 
-        "drops": ["Chemical Amalgam", "Chemistry Kit", "Sludge Abomination card"]
+        "drops": ["Chemical Amalgam", "Chemistry Kit", "Sludge Abomination card"], "elemento": "☠️ Veneno", "raca": "🤖 Amorfo"
     },
     "Rotbloom": {
         "foto_boss": "https://static.divine-pride.net/images/mobs/png/2906.png", 
-        "drops": ["Apothecary Robe", "Addiction Plant", "Rotbloom card"]
+        "drops": ["Apothecary Robe", "Addiction Plant", "Rotbloom card"], "elemento": "☠️ Veneno", "raca": "🌱 Planta"
     },
     "Possessed Marble Idol": {
         "foto_boss": "https://www.spriters-resource.com/media/asset_icons/21/23101.png", 
-        "drops": ["Marble Pillar", "Marble Mask", "Possessed Marble Idol card"]
+        "drops": ["Marble Pillar", "Marble Mask", "Possessed Marble Idol card"], "elemento": "✨ Sagrado", "raca": "👿 Demônio"
     }
 }
 
@@ -164,7 +171,9 @@ if not df_horarios_bruto.empty:
                         if b not in mini_bosses:
                             mini_bosses[b] = {
                                 "foto_boss": "https://via.placeholder.com/32x32.png?text=?", 
-                                "drops": ["Drop Desconhecido"]
+                                "drops": ["Drop Desconhecido"],
+                                "elemento": "❓ Desconhecido",
+                                "raca": "❓ Desconhecido"
                             }
             except:
                 pass
@@ -199,7 +208,9 @@ st.markdown("""
     .status-morto { background-color: transparent; }
     
     .icon-table { width: 24px; height: 24px; border-radius: 4px; vertical-align: middle; margin-right: 8px; }
-    .icon-large { width: 48px; height: 48px; border-radius: 8px; margin-bottom: 8px; }
+    .icon-large { width: 48px; height: 48px; border-radius: 8px; margin-bottom: 4px; }
+    
+    .badge { font-size: 0.75rem; background: #0d1117; color: #c9d1d9; padding: 2px 6px; border-radius: 10px; border: 1px solid #30363d; display: inline-block; margin: 2px; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -234,7 +245,7 @@ with aba1:
                         reg.append({"Item": f"{boss}_{item}", "Membro": m})
         df_send = pd.DataFrame(reg, columns=["Item", "Membro"])
         conn.update(spreadsheet=URL_PLANILHA, worksheet="Interesses", data=df_send)
-        st.success("Sincronizado! (Lembre de apagar as colunas velhas na planilha se ainda estiverem lá)")
+        st.success("Sincronizado!")
         time.sleep(2)
         st.rerun()
     st.markdown('</div>', unsafe_allow_html=True)
@@ -305,9 +316,8 @@ with aba2:
             st.rerun()
 
 # ------------------------------------------
-# ABA 3: MATRIZ DE RESPAWN COM FRAGMENTO DE AUTO-REFRESH
+# ABA 3: MATRIZ DE RESPAWN COM FRAGMENTO
 # ------------------------------------------
-# O @st.fragment diz ao Streamlit para atualizar APENAS esta função sem piscar o resto do site!
 @st.fragment(run_every=5)
 def renderizar_cronograma():
     if not cronograma_por_hora:
@@ -327,7 +337,6 @@ def renderizar_cronograma():
     
     c_hora.info(f"🕒 **Hora Atual:** {hora_atual_exibicao.strftime('%H:%M')} (Ficam verdes por 1 hora)")
 
-    # AJUSTA FUSO HORÁRIO
     cronograma_ajustado = {}
     for h_sv, bosses in cronograma_por_hora.items():
         if is_br:
@@ -337,23 +346,16 @@ def renderizar_cronograma():
             h_ajustado = h_sv
         cronograma_ajustado[h_ajustado] = bosses
 
-    # LÓGICA DE ORDENAÇÃO CIRCULAR (A MÁGICA DA FILA)
     def sort_circular(h_str):
         h_obj = datetime.strptime(h_str, "%H:%M")
         h_mins = h_obj.hour * 60 + h_obj.minute
         diff = h_mins - agora_mins
-        
         if diff < -720: diff += 1440
         elif diff > 720: diff -= 1440
         
-        # Se diff é >= -60, ele é Vivo (0 a -60) ou Futuro (> 0). Ficam no topo.
-        # Se diff < -60, ele é Passado Morto. Vão pro final.
-        if diff >= -60:
-            return diff
-        else:
-            return diff + 1440
+        if diff >= -60: return diff
+        else: return diff + 1440
 
-    # CÁLCULO DA COR - 1 HORA DE VIDA (60 MINUTOS)
     status_map = {}
     futuros = {}
     
@@ -382,13 +384,19 @@ def renderizar_cronograma():
     f1, f2 = st.columns(2)
     modo_visao = f1.selectbox("👁️ Modo de Visualização:", ["Tabela Completa (Por Horário)", "Inverter: Filtrar por Boss"], key="modo_visao")
     
-    # APLICANDO A ORDENAÇÃO CIRCULAR AQUI
     todas_horas = sorted(list(cronograma_ajustado.keys()), key=sort_circular)
     todos_bosses = sorted(list(cronograma_por_boss.keys()))
     
     def get_boss_img(b_name):
         if b_name in mini_bosses:
             return f"<img src='{mini_bosses[b_name]['foto_boss']}' class='icon-table' onerror=\"this.src='https://via.placeholder.com/24'\">"
+        return ""
+        
+    def get_boss_tooltip(b_name):
+        if b_name in mini_bosses:
+            elem = mini_bosses[b_name].get("elemento", "❓ Desconhecido")
+            raca = mini_bosses[b_name].get("raca", "❓ Desconhecido")
+            return f"title='Elemento: {elem} | Raça: {raca}'"
         return ""
 
     if modo_visao == "Tabela Completa (Por Horário)":
@@ -409,12 +417,14 @@ def renderizar_cronograma():
                     html_matriz += f"<td style='text-align: center;'>-</td>"
                 else:
                     img_tag = get_boss_img(b)
-                    html_matriz += f"<td><div style='display: flex; justify-content: center; align-items: center;'>{img_tag}{b}</div></td>"
+                    tooltip = get_boss_tooltip(b)
+                    # Adiciona o Tooltip nativo no TD. O mouse em cima mostra a tag.
+                    html_matriz += f"<td {tooltip}><div style='display: flex; justify-content: center; align-items: center;'>{img_tag}{b}</div></td>"
             html_matriz += "</tr>"
         
         html_matriz += "</table>"
         st.markdown(html_matriz, unsafe_allow_html=True)
-        st.caption("🟢 **VIVO:** Nasceu a menos de 1 hora | 🟡 **PRÓXIMO:** É o próximo da fila")
+        st.caption("🟢 **VIVO:** Nasceu a menos de 1 hora | 🟡 **PRÓXIMO:** É o próximo da fila | ℹ️ **DICA:** Pare o mouse em cima do nome do Boss para ver o Elemento e a Raça.")
 
     else:
         boss_filtro = f2.selectbox("🔍 Selecione o Boss:", todos_bosses, key="boss_filtro")
@@ -423,7 +433,6 @@ def renderizar_cronograma():
         for h_ajustado, lista_b in cronograma_ajustado.items():
             if boss_filtro in lista_b: horas_deste_boss.append(h_ajustado)
         
-        # ORDENA AS HORAS DO BOSS DE FORMA CIRCULAR TAMBÉM
         horas_deste_boss = sorted(horas_deste_boss, key=sort_circular)
         
         def separar_em_grupos(lista, tamanho):
@@ -437,9 +446,14 @@ def renderizar_cronograma():
             
             if i == 0:
                 img_grande = ""
+                badges = ""
                 if boss_filtro in mini_bosses:
                     img_grande = f"<img src='{mini_bosses[boss_filtro]['foto_boss']}' class='icon-large' onerror=\"this.src='https://via.placeholder.com/48'\"><br>"
-                html_matriz += f"<td rowspan='{len(blocos_de_horas)}' class='cell-boss-title'>{img_grande}{boss_filtro}</td>"
+                    elem = mini_bosses[boss_filtro].get("elemento", "❓ Desconhecido")
+                    raca = mini_bosses[boss_filtro].get("raca", "❓ Desconhecido")
+                    badges = f"<br><span class='badge'>{elem}</span><br><span class='badge'>{raca}</span>"
+                    
+                html_matriz += f"<td rowspan='{len(blocos_de_horas)}' class='cell-boss-title'>{img_grande}{boss_filtro}{badges}</td>"
             
             for h in bloco:
                 status = status_map.get(h, "status-morto")
